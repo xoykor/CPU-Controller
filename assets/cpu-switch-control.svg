@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="#0f172a"/>
+  <g fill="none" stroke="#7dd3fc" stroke-linecap="round" stroke-width="7">
+    <path d="M24 39h12M24 64h12M24 89h12M92 39h12M92 64h12M92 89h12"/>
+    <path d="M39 24v12M64 24v12M89 24v12M39 92v12M64 92v12M89 92v12"/>
+  </g>
+  <rect x="36" y="36" width="56" height="56" rx="12" fill="url(#chip)" stroke="#e0f2fe" stroke-width="4"/>
+  <path d="M52 64h24M64 52v24" stroke="#eff6ff" stroke-linecap="round" stroke-width="8"/>
+  <circle cx="64" cy="64" r="7" fill="#0f172a"/>
+</svg>

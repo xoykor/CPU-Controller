@@ -22,6 +22,7 @@ cpu-switch-control
 ```
 
 O instalador instala o aplicativo em `/usr/local/bin/cpu-switch-control`, o daemon em `/usr/local/bin/cpu-clock-switch.py`, a unidade systemd e uma configuração inicial.
+Também instala o ícone e o lançador do menu em `/usr/share/icons/hicolor` e `/usr/share/applications`.
 
 O serviço precisa executar como root para escrever nos controles de frequência em `/sys`. O aplicativo usa `pkexec` somente ao salvar no arquivo do sistema ou reiniciar o serviço.
 
