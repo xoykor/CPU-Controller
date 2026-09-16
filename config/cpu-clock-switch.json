@@ -1,0 +1,7 @@
+{
+  "low_threshold_pct": 6.0,
+  "high_threshold_pct": 10.0,
+  "low_frequency_khz": 1200000,
+  "high_frequency_khz": 3500000,
+  "interval_ms": 500
+}

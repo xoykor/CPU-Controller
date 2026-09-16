@@ -1,0 +1,13 @@
+[Unit]
+Description=CPU Clock Switch - configurable CPU frequency controller
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/cpu-clock-switch.py
+Environment=CPU_CLOCK_SWITCH_CONFIG=/etc/cpu-clock-switch.json
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
