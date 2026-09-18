@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/cpu-clock-switch.py
+ExecStart=/usr/local/bin/cpu-clock-switch-daemon
 Environment=CPU_CLOCK_SWITCH_CONFIG=/etc/cpu-clock-switch.json
 Restart=always
 RestartSec=1
