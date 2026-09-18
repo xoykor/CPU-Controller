@@ -40,6 +40,7 @@ export APPIMAGE_EXTRACT_AND_RUN="${APPIMAGE_EXTRACT_AND_RUN:-1}"
 # Keep privileged/system integration resources inside the immutable AppImage.
 # Recursos abaixo não são dependências ELF; precisam ser copiados explicitamente para o AppDir.
 install -Dm755 "$ROOT_DIR/build/cpu-clock-switch-daemon"     "$APPDIR/usr/bin/cpu-clock-switch-daemon"
+install -Dm755 "$ROOT_DIR/packaging/appimage/ensure-system-components.sh"     "$APPDIR/usr/lib/cpu-switch-control/ensure-system-components.sh"
 install -Dm755 "$ROOT_DIR/packaging/appimage/install-system-components.sh"     "$APPDIR/usr/lib/cpu-switch-control/install-system-components.sh"
 install -Dm644 "$ROOT_DIR/service/cpu-clock-switch.service"     "$APPDIR/usr/share/cpu-switch-control/cpu-clock-switch.service"
 install -Dm644 "$ROOT_DIR/config/cpu-clock-switch.json"     "$APPDIR/usr/share/cpu-switch-control/cpu-clock-switch.json"

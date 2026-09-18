@@ -45,29 +45,12 @@ if [ -d "$APPROOT/apprun-hooks" ]; then
     done
 fi
 
-# The GUI can live inside the AppImage, but systemd cannot run a daemon from the
-# temporary AppImage mount after it is unmounted. Keep a synchronized system
-# copy. CPU_SWITCH_SKIP_SYSTEM_SETUP=1 disables this first-run/update prompt.
-# O daemon precisa de caminho persistente para o systemd; por isso é sincronizado fora do mount temporário.
+# O script abaixo faz staging fora do mount FUSE antes de usar pkexec.
+# Falhas não impedem a abertura da GUI; ela também consegue tentar reparar o
+# serviço novamente quando o usuário solicita "Salvar e reiniciar serviço".
 if [ "${CPU_SWITCH_SKIP_SYSTEM_SETUP:-0}" != "1" ] &&
-   [ -d /run/systemd/system ] &&
-   command -v pkexec >/dev/null 2>&1; then
-    embedded_daemon="$APPROOT/usr/bin/cpu-clock-switch-daemon"
-    embedded_unit="$APPROOT/usr/share/cpu-switch-control/cpu-clock-switch.service"
-    system_daemon="/usr/local/bin/cpu-clock-switch-daemon"
-    system_unit="/etc/systemd/system/cpu-clock-switch.service"
-    need_setup=0
-
-    if [ ! -x "$system_daemon" ] || ! cmp -s "$embedded_daemon" "$system_daemon"; then
-        need_setup=1
-    fi
-    if [ ! -f "$system_unit" ] || ! cmp -s "$embedded_unit" "$system_unit"; then
-        need_setup=1
-    fi
-
-    if [ "$need_setup" -eq 1 ]; then
-        pkexec "$APPROOT/usr/lib/cpu-switch-control/install-system-components.sh" || true
-    fi
+   [ -d /run/systemd/system ]; then
+    "$APPROOT/usr/lib/cpu-switch-control/ensure-system-components.sh" || true
 fi
 
 # Substitui o shell pela GUI para que sinais e código de saída sejam propagados corretamente.
