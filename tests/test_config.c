@@ -1,3 +1,10 @@
+/*
+ * Testes da configuração de frequência.
+ *
+ * Estes testes verificam valores padrão, validação e o ciclo completo de
+ * gravação + leitura do pequeno arquivo JSON usado pelo daemon.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"
