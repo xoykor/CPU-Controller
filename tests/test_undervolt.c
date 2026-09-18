@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unistd.h>
 
+/* Helper dos testes: lê o arquivo inteiro para comparar o texto gerado. */
 static char *read_file(const char *path) {
     FILE *file = fopen(path, "rb");
     assert(file != NULL);
@@ -31,6 +32,7 @@ static char *read_file(const char *path) {
 }
 
 int main(void) {
+    /* 1) Valores negativos dentro da faixa são aceitos; overvolt é rejeitado. */
     double offsets[UNDERVOLT_DOMAIN_COUNT] = {-70.0, 0.0, -60.5, 0.0, 0.0};
     char error[256] = {0};
     assert(undervolt_validate(offsets, error, sizeof(error)) == 0);
@@ -39,6 +41,7 @@ int main(void) {
     assert(undervolt_validate(offsets, error, sizeof(error)) != 0);
     offsets[0] = -70.0;
 
+    /* 2) A reescrita deve preservar comentários e opções que não são offsets. */
     char source[] = "/tmp/intel-undervolt-source-XXXXXX";
     int source_fd = mkstemp(source);
     assert(source_fd >= 0);
@@ -70,6 +73,7 @@ int main(void) {
     assert(strstr(rewritten, "undervolt 2 'CPU Cache' -60.50") != NULL);
     free(rewritten);
 
+    /* 3) Simula a saída real de uma CPU que expõe apenas CPU, Cache e Uncore. */
     double parsed[UNDERVOLT_DOMAIN_COUNT];
     unsigned char present[UNDERVOLT_DOMAIN_COUNT];
     undervolt_defaults(parsed);
@@ -87,6 +91,7 @@ int main(void) {
     assert(parsed[2] < -60.54 && parsed[2] > -60.56);
     assert(parsed[3] < -24.99 && parsed[3] > -25.01);
 
+    /* 4) Domínios ausentes da máscara devem permanecer literalmente inalterados. */
     char masked_source[] = "/tmp/intel-undervolt-masked-source-XXXXXX";
     int masked_source_fd = mkstemp(masked_source);
     assert(masked_source_fd >= 0);
