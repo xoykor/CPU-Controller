@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - daemon.c
+ *
+ * Processo de serviço que aplica a histerese de carga configurada pelo usuário.
+ * Ele lê o uso total da CPU e alterna todas as políticas cpufreq entre a
+ * frequência de baixa carga e a de alta carga.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"
