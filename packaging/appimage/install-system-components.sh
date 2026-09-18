@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# CPU Switch Control - instalador privilegiado usado pelo AppImage.
+#
+# Este script é chamado via pkexec. Ele instala apenas destinos fixos do projeto
+# e nunca aceita caminhos arbitrários fornecidos pelo usuário.
+
 set -eu
 
 if [ "$(id -u)" -ne 0 ]; then
