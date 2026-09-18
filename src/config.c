@@ -18,12 +18,14 @@
 /* Small error-reporting helpers                                              */
 /* ------------------------------------------------------------------------- */
 
+/* Copia uma mensagem de erro para o buffer do chamador quando ele foi fornecido. */
 static void set_error(char *buffer, size_t size, const char *message) {
     if (buffer != NULL && size > 0) {
         snprintf(buffer, size, "%s", message);
     }
 }
 
+/* Formata erros de sistema preservando o contexto da operação e a mensagem de errno. */
 static void set_errno_error(char *buffer,
                             size_t size,
                             const char *prefix,
@@ -105,6 +107,7 @@ static const char *find_json_value(const char *json, const char *key) {
     return position == NULL ? NULL : position + 1;
 }
 
+/* Localiza uma chave numérica no JSON simples e converte seu valor para double. */
 static int parse_double_field(const char *json, const char *key, double *value) {
     const char *position = find_json_value(json, key);
     if (position == NULL) {
@@ -122,6 +125,7 @@ static int parse_double_field(const char *json, const char *key, double *value) 
     return 1;
 }
 
+/* Lê um inteiro sem sinal do JSON, usado para frequências e intervalos em milissegundos. */
 static int parse_u64_field(const char *json, const char *key, uint64_t *value) {
     const char *position = find_json_value(json, key);
     if (position == NULL) {
@@ -150,6 +154,7 @@ static int parse_u64_field(const char *json, const char *key, uint64_t *value) {
 /* Public configuration API                                                   */
 /* ------------------------------------------------------------------------- */
 
+/* Define valores conservadores usados quando ainda não existe arquivo de configuração válido. */
 void cpu_config_defaults(CpuConfig *config) {
     if (config == NULL) {
         return;
@@ -162,6 +167,7 @@ void cpu_config_defaults(CpuConfig *config) {
     config->interval_ms = 500;
 }
 
+/* Carrega apenas as chaves conhecidas; campos ausentes continuam com seus valores padrão. */
 int cpu_config_load(const char *path,
                     CpuConfig *config,
                     char *error,
@@ -198,6 +204,7 @@ int cpu_config_load(const char *path,
     return 0;
 }
 
+/* Serializa a configuração em JSON legível para humanos e estável entre versões. */
 int cpu_config_write(const char *path,
                      const CpuConfig *config,
                      char *error,
@@ -234,6 +241,7 @@ int cpu_config_write(const char *path,
     return 0;
 }
 
+/* Centraliza todas as regras que precisam valer antes de salvar ou iniciar o daemon. */
 int cpu_config_validate(const CpuConfig *config,
                         uint64_t min_khz,
                         uint64_t max_khz,
