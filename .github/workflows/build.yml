@@ -1,3 +1,6 @@
+# CI principal: compila toda a implementação C e executa os testes.
+# O objetivo é detectar regressões de compilação antes que mudanças cheguem à main.
+
 name: C build
 
 on:
