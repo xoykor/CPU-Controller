@@ -1,3 +1,19 @@
+/*
+ * CPU Switch Control - main.c
+ *
+ * Interface gráfica GTK4 do projeto. Este arquivo coordena os módulos de CPU,
+ * configuração, comandos privilegiados e undervolt, mas evita implementar aqui
+ * os detalhes de baixo nível de cada um deles.
+ *
+ * Organização:
+ *   1. estado e helpers de interface;
+ *   2. configuração de frequência;
+ *   3. métricas e status do serviço;
+ *   4. controle de tensão/undervolt;
+ *   5. construção das páginas GTK;
+ *   6. ciclo de vida da aplicação.
+ */
+
 #define _GNU_SOURCE
 
 #include "command.h"
