@@ -1,3 +1,10 @@
+/*
+ * Testes da camada de undervolt.
+ *
+ * O foco é garantir parsing correto, rejeição de valores perigosos e preservação
+ * de domínios que o hardware não expõe ao usuário.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "undervolt.h"
