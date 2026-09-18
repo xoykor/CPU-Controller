@@ -1,2 +1,6 @@
 /build/
 *.o
+/AppDir/
+/dist/
+/tools/
+/squashfs-root/

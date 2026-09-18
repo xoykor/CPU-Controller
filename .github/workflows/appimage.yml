@@ -1,0 +1,53 @@
+name: AppImage
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y             build-essential             pkg-config             libgtk-4-dev             libgirepository1.0-dev             librsvg2-dev             file             curl
+
+      - name: Run tests
+        run: make test
+
+      - name: Download AppImage tools
+        run: |
+          mkdir -p tools
+          curl -fL             https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage             -o tools/linuxdeploy-x86_64.AppImage
+          curl -fL             https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/7a3fbc31a9e5075073ff8790f26effbac5f84453/linuxdeploy-plugin-gtk.sh             -o tools/linuxdeploy-plugin-gtk.sh
+          curl -fL             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage             -o tools/appimagetool-x86_64.AppImage
+          chmod +x tools/*
+
+      - name: Build AppImage
+        run: packaging/appimage/build-appimage.sh
+
+      - name: Verify AppImage contents
+        run: |
+          rm -rf squashfs-root
+          ./dist/CPU-Switch-Control-x86_64.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/cpu-switch-control
+          test -x squashfs-root/usr/bin/cpu-clock-switch-daemon
+          test -x squashfs-root/usr/lib/cpu-switch-control/install-system-components.sh
+          test -f squashfs-root/usr/share/cpu-switch-control/cpu-clock-switch.service
+          test -f squashfs-root/usr/share/cpu-switch-control/cpu-clock-switch.json
+          rm -rf squashfs-root
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPU-Switch-Control-AppImage-x86_64
+          path: dist/CPU-Switch-Control-x86_64.AppImage
+          if-no-files-found: error

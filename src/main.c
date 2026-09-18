@@ -873,7 +873,7 @@ static void activate(GtkApplication *application, gpointer user_data) {
 
 int main(int argc, char **argv) {
     GtkApplication *application =
-        gtk_application_new("io.github.xoykor.cpu-switch-control", G_APPLICATION_DEFAULT_FLAGS);
+        gtk_application_new("io.github.xoykor.cpu-switch-control", (GApplicationFlags)0);
     g_signal_connect(application, "activate", G_CALLBACK(activate), NULL);
 
     int status = g_application_run(G_APPLICATION(application), argc, argv);
