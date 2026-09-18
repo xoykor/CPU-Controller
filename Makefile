@@ -1,3 +1,13 @@
+# CPU Switch Control - Makefile
+#
+# Alvos principais:
+#   make          -> compila GUI e daemon;
+#   make test     -> executa os testes unitários;
+#   make install  -> instala binários e arquivos de integração;
+#   make enable   -> habilita o daemon no systemd.
+#
+# O projeto usa C17 e GTK4; não há Cargo, Rust ou Python no runtime.
+
 CC ?= cc
 PKG_CONFIG ?= pkg-config
 PREFIX ?= /usr/local
