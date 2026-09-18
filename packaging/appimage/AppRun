@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# CPU Switch Control - ponto de entrada do AppImage.
+#
+# Configura os caminhos internos do AppImage, carrega hooks de runtime do GTK e
+# sincroniza o daemon/systemd com o sistema quando necessário.
+
 set -eu
 
 if [ -n "${APPDIR:-}" ]; then
