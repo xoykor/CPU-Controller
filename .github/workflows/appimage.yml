@@ -1,3 +1,6 @@
+# CI de distribuição: compila em Ubuntu 22.04 para ampliar compatibilidade,
+# monta o AppImage e extrai o resultado para conferir seu conteúdo antes do upload.
+
 name: AppImage
 
 on:
