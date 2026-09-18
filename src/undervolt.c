@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - undervolt.c
+ *
+ * Manipula os offsets de tensão usados pelo backend intel-undervolt.
+ * O módulo sabe interpretar a saída do backend, preservar o arquivo de
+ * configuração existente e alterar somente os domínios detectados no hardware.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "undervolt.h"
