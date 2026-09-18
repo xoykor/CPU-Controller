@@ -42,9 +42,14 @@
  */
 typedef struct {
     GtkWidget *window;
+
+    /* Banner de status da nova interface. */
+    GtkWidget *status_box;
+    GtkWidget *status_title_label;
     GtkWidget *status_label;
 
     /* Frequency page */
+    GtkWidget *service_card;
     GtkWidget *service_label;
     GtkWidget *usage_label;
     GtkWidget *frequency_label;
@@ -121,12 +126,19 @@ static void grid_add_row(GtkWidget *grid,
 
 /* Atualiza a mensagem global de status e troca a classe CSS conforme sucesso ou erro. */
 static void set_status(AppState *state, const char *message, gboolean is_error) {
-    gtk_label_set_text(GTK_LABEL(state->status_label), message != NULL ? message : "");
+    gboolean visible = message != NULL && *message != '\0';
+    gtk_widget_set_visible(state->status_box, visible);
+    if (!visible) {
+        return;
+    }
 
-    /* Named CSS classes keep status styling readable without custom CSS. */
-    gtk_widget_remove_css_class(state->status_label, "error");
-    gtk_widget_remove_css_class(state->status_label, "accent");
-    gtk_widget_add_css_class(state->status_label, is_error ? "error" : "accent");
+    gtk_label_set_text(GTK_LABEL(state->status_title_label),
+                       is_error ? "Falha ao aplicar a ação" : "Operação concluída");
+    gtk_label_set_text(GTK_LABEL(state->status_label), message);
+
+    gtk_widget_remove_css_class(state->status_box, "status-error");
+    gtk_widget_remove_css_class(state->status_box, "status-ok");
+    gtk_widget_add_css_class(state->status_box, is_error ? "status-error" : "status-ok");
 }
 
 /* Converte kHz do kernel para uma string curta em MHz ou GHz apropriada para a interface. */
@@ -188,8 +200,8 @@ static void frequency_config_to_widgets(AppState *state) {
 
     if (!state->have_frequency_range) {
         gtk_widget_set_sensitive(state->frequency_controls, FALSE);
-        gtk_label_set_text(GTK_LABEL(state->range_label), "Faixa cpufreq não detectada");
-        gtk_label_set_text(GTK_LABEL(state->policy_label), "Políticas: 0");
+        gtk_label_set_text(GTK_LABEL(state->range_label), "Indisponível");
+        gtk_label_set_text(GTK_LABEL(state->policy_label), "0");
         return;
     }
 
@@ -205,8 +217,8 @@ static void frequency_config_to_widgets(AppState *state) {
 
     char *minimum = format_frequency(state->min_khz);
     char *maximum = format_frequency(state->max_khz);
-    char *range_text = g_strdup_printf("Faixa comum: %s — %s", minimum, maximum);
-    char *policy_text = g_strdup_printf("Políticas: %zu", state->policy_count);
+    char *range_text = g_strdup_printf("%s — %s", minimum, maximum);
+    char *policy_text = g_strdup_printf("%zu", state->policy_count);
     gtk_label_set_text(GTK_LABEL(state->range_label), range_text);
     gtk_label_set_text(GTK_LABEL(state->policy_label), policy_text);
     g_free(policy_text);
@@ -353,9 +365,8 @@ static gboolean ensure_frequency_service(AppState *state, char **detail) {
      * mas a resposta instantânea deixa claro que o reparo funcionou.
      */
     char *service_state = command_systemctl_state("is-active", SERVICE_NAME);
-    char *label = g_strdup_printf("Serviço: %s", service_state);
-    gtk_label_set_text(GTK_LABEL(state->service_label), label);
-    g_free(label);
+    gtk_label_set_text(GTK_LABEL(state->service_label),
+                       g_strcmp0(service_state, "active") == 0 ? "Ativo" : service_state);
     g_free(service_state);
 
     return TRUE;
@@ -503,7 +514,7 @@ static gboolean refresh_metrics(gpointer user_data) {
     if (cpu_linux_read_times(&current, error, sizeof(error)) == 0) {
         if (state->have_previous_times) {
             double usage = cpu_linux_usage_percent(&state->previous_times, &current);
-            char *usage_text = g_strdup_printf("Uso atual: %.1f%%", usage);
+            char *usage_text = g_strdup_printf("%.1f%%", usage);
             gtk_label_set_text(GTK_LABEL(state->usage_label), usage_text);
             g_free(usage_text);
         }
@@ -514,12 +525,10 @@ static gboolean refresh_metrics(gpointer user_data) {
     uint64_t frequency_khz = 0;
     if (cpu_linux_read_current_frequency(&frequency_khz, error, sizeof(error)) == 0) {
         char *frequency = format_frequency(frequency_khz);
-        char *label = g_strdup_printf("Frequência atual: %s", frequency);
-        gtk_label_set_text(GTK_LABEL(state->frequency_label), label);
-        g_free(label);
+        gtk_label_set_text(GTK_LABEL(state->frequency_label), frequency);
         g_free(frequency);
     } else {
-        gtk_label_set_text(GTK_LABEL(state->frequency_label), "Frequência atual: indisponível");
+        gtk_label_set_text(GTK_LABEL(state->frequency_label), "Indisponível");
     }
 
     return G_SOURCE_CONTINUE;
@@ -529,15 +538,27 @@ static gboolean refresh_metrics(gpointer user_data) {
 static gboolean refresh_service_status(gpointer user_data) {
     AppState *state = user_data;
 
+    gtk_widget_remove_css_class(state->service_card, "metric-good");
+    gtk_widget_remove_css_class(state->service_card, "metric-critical");
+
     if (!frequency_service_is_installed()) {
-        gtk_label_set_text(GTK_LABEL(state->service_label), "Serviço: não instalado");
+        gtk_label_set_text(GTK_LABEL(state->service_label), "Não instalado");
+        gtk_widget_add_css_class(state->service_card, "metric-critical");
         return G_SOURCE_CONTINUE;
     }
 
     char *service_state = command_systemctl_state("is-active", SERVICE_NAME);
-    char *label = g_strdup_printf("Serviço: %s", service_state);
-    gtk_label_set_text(GTK_LABEL(state->service_label), label);
-    g_free(label);
+    if (g_strcmp0(service_state, "active") == 0) {
+        gtk_label_set_text(GTK_LABEL(state->service_label), "Ativo");
+        gtk_widget_add_css_class(state->service_card, "metric-good");
+    } else if (g_strcmp0(service_state, "inactive") == 0) {
+        gtk_label_set_text(GTK_LABEL(state->service_label), "Inativo");
+        gtk_widget_add_css_class(state->service_card, "metric-critical");
+    } else {
+        gtk_label_set_text(GTK_LABEL(state->service_label), service_state);
+        gtk_widget_add_css_class(state->service_card, "metric-critical");
+    }
+
     g_free(service_state);
     return G_SOURCE_CONTINUE;
 }
@@ -816,135 +837,366 @@ static void on_undervolt_refresh(GtkButton *button, gpointer user_data) {
 /* Page construction                                                          */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Folha de estilo autocontida.
+ *
+ * O aplicativo continua usando widgets GTK4 nativos, mas define cards,
+ * hierarquia tipográfica e espaçamento próprios para não depender da estética
+ * do tema instalado no desktop.
+ */
+static void install_application_css(void) {
+    const char *css =
+        ".app-root { background: #f4f7fb; }"
+        ".hero-card, .section-card, .metric-card, .status-banner {"
+        "  background: #ffffff;"
+        "  border: 1px solid rgba(35, 55, 85, 0.12);"
+        "  border-radius: 18px;"
+        "  box-shadow: 0 8px 26px rgba(31, 44, 86, 0.08);"
+        "}"
+        ".hero-card { padding: 22px; }"
+        ".section-card { padding: 20px; }"
+        ".metric-card { padding: 16px; min-width: 155px; }"
+        ".status-banner { padding: 16px 18px; }"
+        ".status-error { background: #fff4e8; border-color: #f4b979; }"
+        ".status-ok { background: #edf9f0; border-color: #a9d9b3; }"
+        ".hero-title { font-size: 2.05rem; font-weight: 800; color: #1f2d55; }"
+        ".hero-subtitle { font-size: 1.05rem; color: #687792; }"
+        ".section-title { font-size: 1.35rem; font-weight: 800; color: #24365d; }"
+        ".section-subtitle { font-size: 0.96rem; color: #72809a; }"
+        ".metric-title { font-size: 0.92rem; color: #657391; }"
+        ".metric-value { font-size: 1.60rem; font-weight: 800; color: #16213e; }"
+        ".field-label { font-size: 1rem; font-weight: 600; color: #2b395c; }"
+        ".field-help { font-size: 0.90rem; color: #75819a; }"
+        ".unit-chip {"
+        "  background: #edf2f8;"
+        "  color: #344466;"
+        "  border-radius: 10px;"
+        "  padding: 8px 10px;"
+        "  font-weight: 700;"
+        "}"
+        ".icon-badge {"
+        "  min-width: 38px;"
+        "  min-height: 38px;"
+        "  border-radius: 13px;"
+        "  padding: 8px;"
+        "  font-weight: 800;"
+        "  background: #eaf1ff;"
+        "  color: #2563eb;"
+        "}"
+        ".badge-green { background: #eaf8ef; color: #15803d; }"
+        ".badge-red { background: #feeceb; color: #c62828; }"
+        ".badge-purple { background: #f1ebff; color: #6d28d9; }"
+        ".badge-gray { background: #edf1f5; color: #475569; }"
+        ".metric-good { border-color: #a9d9b3; }"
+        ".metric-critical { border-color: #efc1b9; background: #fffafa; }"
+        ".status-title { font-size: 1.12rem; font-weight: 800; color: #8a3c00; }"
+        ".status-message { font-size: 0.98rem; color: #95460d; }"
+        ".modern-switcher button { border-radius: 12px; padding: 10px 18px; }"
+        ".modern-switcher button:checked {"
+        "  background: #eaf1ff;"
+        "  color: #1d4ed8;"
+        "  font-weight: 800;"
+        "}"
+        ".action-row button { padding: 11px 17px; border-radius: 13px; }"
+        ".field-spin { min-width: 165px; }";
+
+    GtkCssProvider *provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(provider, css, -1);
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(),
+                                               GTK_STYLE_PROVIDER(provider),
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(provider);
+}
+
+/* Cria um label com classe visual e alinhamento previsíveis. */
+static GtkWidget *styled_label(const char *text, const char *css_class, float xalign) {
+    GtkWidget *label = gtk_label_new(text);
+    gtk_label_set_xalign(GTK_LABEL(label), xalign);
+    if (css_class != NULL) {
+        gtk_widget_add_css_class(label, css_class);
+    }
+    return label;
+}
+
+/* Badge compacto usado como detalhe visual nos cards. */
+static GtkWidget *icon_badge(const char *text, const char *extra_class) {
+    GtkWidget *badge = styled_label(text, "icon-badge", 0.5F);
+    if (extra_class != NULL) {
+        gtk_widget_add_css_class(badge, extra_class);
+    }
+    return badge;
+}
+
+/* Card reutilizável para as cinco métricas principais. */
+static GtkWidget *metric_card(const char *icon,
+                              const char *badge_class,
+                              const char *title,
+                              GtkWidget **value_label) {
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(card, "metric-card");
+    gtk_widget_set_hexpand(card, TRUE);
+
+    gtk_box_append(GTK_BOX(card), icon_badge(icon, badge_class));
+
+    GtkWidget *text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_append(GTK_BOX(text), styled_label(title, "metric-title", 0.0F));
+
+    GtkWidget *value = styled_label("—", "metric-value", 0.0F);
+    gtk_label_set_ellipsize(GTK_LABEL(value), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(text), value);
+    gtk_box_append(GTK_BOX(card), text);
+
+    if (value_label != NULL) {
+        *value_label = value;
+    }
+    return card;
+}
+
+/* Card grande com título e subtítulo para agrupar formulários. */
+static GtkWidget *section_card(const char *icon,
+                               const char *badge_class,
+                               const char *title,
+                               const char *subtitle,
+                               GtkWidget **content_out) {
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+    gtk_widget_add_css_class(card, "section-card");
+
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_box_append(GTK_BOX(header), icon_badge(icon, badge_class));
+
+    GtkWidget *titles = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_box_append(GTK_BOX(titles), styled_label(title, "section-title", 0.0F));
+
+    GtkWidget *subtitle_label = styled_label(subtitle, "section-subtitle", 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(subtitle_label), TRUE);
+    gtk_box_append(GTK_BOX(titles), subtitle_label);
+    gtk_box_append(GTK_BOX(header), titles);
+    gtk_box_append(GTK_BOX(card), header);
+
+    GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_box_append(GTK_BOX(card), content);
+    if (content_out != NULL) {
+        *content_out = content;
+    }
+    return card;
+}
+
+/* Linha de formulário com campo, unidade e explicação lateral. */
+static GtkWidget *form_spin_row(GtkWidget *grid,
+                                int row,
+                                const char *label_text,
+                                const char *helper_text,
+                                const char *unit,
+                                double minimum,
+                                double maximum,
+                                double step,
+                                unsigned int digits) {
+    GtkWidget *label = styled_label(label_text, "field-label", 0.0F);
+    GtkWidget *spin = new_spin(minimum, maximum, step, digits);
+    gtk_widget_add_css_class(spin, "field-spin");
+
+    GtkWidget *unit_label = styled_label(unit, "unit-chip", 0.5F);
+    GtkWidget *helper = styled_label(helper_text, "field-help", 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(helper), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(helper), 38);
+
+    gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), spin, 1, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), unit_label, 2, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), helper, 3, row, 1, 1);
+    return spin;
+}
+
+/* Cabeçalho principal do aplicativo. */
+static GtkWidget *build_hero_header(void) {
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
+    gtk_widget_add_css_class(header, "hero-card");
+
+    gtk_box_append(GTK_BOX(header), icon_badge("CPU", NULL));
+
+    GtkWidget *titles = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_hexpand(titles, TRUE);
+    gtk_box_append(GTK_BOX(titles),
+                   styled_label("CPU Switch Control", "hero-title", 0.0F));
+    gtk_box_append(GTK_BOX(titles),
+                   styled_label("Alterna automaticamente entre dois clocks conforme o uso total da CPU.",
+                                "hero-subtitle",
+                                0.0F));
+    gtk_box_append(GTK_BOX(header), titles);
+    return header;
+}
+
+/* Banner de feedback que substitui o texto solto usado na interface antiga. */
+static GtkWidget *build_status_banner(AppState *state) {
+    GtkWidget *banner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(banner, "status-banner");
+    gtk_widget_set_visible(banner, FALSE);
+    state->status_box = banner;
+
+    gtk_box_append(GTK_BOX(banner), icon_badge("!", "badge-red"));
+
+    GtkWidget *text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    state->status_title_label = styled_label("", "status-title", 0.0F);
+    state->status_label = styled_label("", "status-message", 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(state->status_label), TRUE);
+    gtk_box_append(GTK_BOX(text), state->status_title_label);
+    gtk_box_append(GTK_BOX(text), state->status_label);
+    gtk_box_append(GTK_BOX(banner), text);
+    return banner;
+}
+
+/* Cards de resumo; permanecem visíveis ao alternar entre Frequência e Tensão. */
+static GtkWidget *build_metric_cards(AppState *state) {
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_hexpand(row, TRUE);
+
+    state->service_card =
+        metric_card("S", "badge-red", "Serviço", &state->service_label);
+    GtkWidget *usage =
+        metric_card("%", "badge-green", "Uso atual da CPU", &state->usage_label);
+    GtkWidget *frequency =
+        metric_card("Hz", NULL, "Frequência atual", &state->frequency_label);
+    GtkWidget *range =
+        metric_card("↔", "badge-purple", "Faixa comum", &state->range_label);
+    GtkWidget *policies =
+        metric_card("#", "badge-gray", "Políticas", &state->policy_label);
+
+    gtk_box_append(GTK_BOX(row), state->service_card);
+    gtk_box_append(GTK_BOX(row), usage);
+    gtk_box_append(GTK_BOX(row), frequency);
+    gtk_box_append(GTK_BOX(row), range);
+    gtk_box_append(GTK_BOX(row), policies);
+    return row;
+}
+
 /* Monta todos os widgets da aba Frequência e conecta seus callbacks. */
 static GtkWidget *build_frequency_page(AppState *state) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_top(page, 16);
-    gtk_widget_set_margin_bottom(page, 16);
-    gtk_widget_set_margin_start(page, 16);
-    gtk_widget_set_margin_end(page, 16);
+    gtk_widget_set_margin_top(page, 4);
 
-    GtkWidget *description = new_left_label(
-        "Alterna automaticamente entre dois clocks conforme o uso total da CPU.");
-    gtk_label_set_wrap(GTK_LABEL(description), TRUE);
-    gtk_box_append(GTK_BOX(page), description);
+    GtkWidget *content = NULL;
+    GtkWidget *card =
+        section_card("⚙",
+                     NULL,
+                     "Histerese e frequências",
+                     "Configure os limites de uso da CPU e os clocks para cada nível de carga.",
+                     &content);
 
-    state->service_label = new_left_label("Serviço: --");
-    state->usage_label = new_left_label("Uso atual: --");
-    state->frequency_label = new_left_label("Frequência atual: --");
-    state->range_label = new_left_label("Faixa comum: --");
-    state->policy_label = new_left_label("Políticas: --");
-
-    GtkWidget *metrics = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_box_append(GTK_BOX(metrics), state->service_label);
-    gtk_box_append(GTK_BOX(metrics), state->usage_label);
-    gtk_box_append(GTK_BOX(metrics), state->frequency_label);
-    gtk_box_append(GTK_BOX(metrics), state->range_label);
-    gtk_box_append(GTK_BOX(metrics), state->policy_label);
-    gtk_box_append(GTK_BOX(page), metrics);
-
-    GtkWidget *frame = gtk_frame_new("Histerese e frequências");
     state->frequency_controls = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(state->frequency_controls), 10);
-    gtk_grid_set_column_spacing(GTK_GRID(state->frequency_controls), 10);
-    gtk_widget_set_margin_top(state->frequency_controls, 12);
-    gtk_widget_set_margin_bottom(state->frequency_controls, 12);
-    gtk_widget_set_margin_start(state->frequency_controls, 12);
-    gtk_widget_set_margin_end(state->frequency_controls, 12);
+    gtk_grid_set_row_spacing(GTK_GRID(state->frequency_controls), 12);
+    gtk_grid_set_column_spacing(GTK_GRID(state->frequency_controls), 14);
 
-    state->low_threshold_spin = new_spin(0.0, 99.0, 1.0, 0);
-    state->high_threshold_spin = new_spin(1.0, 100.0, 1.0, 0);
-    state->low_frequency_spin = new_spin(100.0, 10000.0, 100.0, 0);
-    state->high_frequency_spin = new_spin(100.0, 10000.0, 100.0, 0);
-    state->interval_spin = new_spin(100.0, 5000.0, 100.0, 0);
+    state->low_threshold_spin =
+        form_spin_row(state->frequency_controls,
+                      0,
+                      "Baixa carga abaixo de",
+                      "Abaixo deste valor é usado o clock de baixa carga.",
+                      "%",
+                      0.0,
+                      99.0,
+                      1.0,
+                      0);
+    state->low_frequency_spin =
+        form_spin_row(state->frequency_controls,
+                      1,
+                      "Clock de baixa carga",
+                      "Frequência aplicada enquanto a CPU permanece em baixa carga.",
+                      "MHz",
+                      100.0,
+                      10000.0,
+                      100.0,
+                      0);
+    state->high_threshold_spin =
+        form_spin_row(state->frequency_controls,
+                      2,
+                      "Alta carga acima de",
+                      "Acima deste valor é usado o clock de alta carga.",
+                      "%",
+                      1.0,
+                      100.0,
+                      1.0,
+                      0);
+    state->high_frequency_spin =
+        form_spin_row(state->frequency_controls,
+                      3,
+                      "Clock de alta carga",
+                      "Frequência aplicada enquanto a CPU permanece em alta carga.",
+                      "MHz",
+                      100.0,
+                      10000.0,
+                      100.0,
+                      0);
+    state->interval_spin =
+        form_spin_row(state->frequency_controls,
+                      4,
+                      "Intervalo de leitura",
+                      "Intervalo entre duas amostras consecutivas do uso da CPU.",
+                      "ms",
+                      100.0,
+                      5000.0,
+                      100.0,
+                      0);
 
-    grid_add_row(state->frequency_controls,
-                 0,
-                 "Baixa carga abaixo de",
-                 state->low_threshold_spin,
-                 "%");
-    grid_add_row(state->frequency_controls,
-                 1,
-                 "Clock de baixa carga",
-                 state->low_frequency_spin,
-                 "MHz");
-    grid_add_row(state->frequency_controls,
-                 2,
-                 "Alta carga acima de",
-                 state->high_threshold_spin,
-                 "%");
-    grid_add_row(state->frequency_controls,
-                 3,
-                 "Clock de alta carga",
-                 state->high_frequency_spin,
-                 "MHz");
-    grid_add_row(state->frequency_controls,
-                 4,
-                 "Intervalo de leitura",
-                 state->interval_spin,
-                 "ms");
+    gtk_box_append(GTK_BOX(content), state->frequency_controls);
 
-    gtk_frame_set_child(GTK_FRAME(frame), state->frequency_controls);
-    gtk_box_append(GTK_BOX(page), frame);
-
-    GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
+    gtk_widget_add_css_class(actions, "action-row");
     GtkWidget *save = gtk_button_new_with_label("Salvar");
     GtkWidget *save_restart = gtk_button_new_with_label("Salvar e reiniciar serviço");
     GtkWidget *defaults = gtk_button_new_with_label("Restaurar padrões");
     GtkWidget *refresh = gtk_button_new_with_label("Redetectar CPU");
+    gtk_widget_add_css_class(save, "suggested-action");
+
     g_signal_connect(save, "clicked", G_CALLBACK(on_frequency_save), state);
     g_signal_connect(save_restart, "clicked", G_CALLBACK(on_frequency_save_restart), state);
     g_signal_connect(defaults, "clicked", G_CALLBACK(on_frequency_defaults), state);
     g_signal_connect(refresh, "clicked", G_CALLBACK(on_hardware_refresh), state);
-    gtk_box_append(GTK_BOX(buttons), save);
-    gtk_box_append(GTK_BOX(buttons), save_restart);
-    gtk_box_append(GTK_BOX(buttons), defaults);
-    gtk_box_append(GTK_BOX(buttons), refresh);
-    gtk_box_append(GTK_BOX(page), buttons);
 
+    gtk_box_append(GTK_BOX(actions), save);
+    gtk_box_append(GTK_BOX(actions), save_restart);
+    gtk_box_append(GTK_BOX(actions), defaults);
+
+    GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(spacer, TRUE);
+    gtk_box_append(GTK_BOX(actions), spacer);
+    gtk_box_append(GTK_BOX(actions), refresh);
+
+    gtk_box_append(GTK_BOX(content), actions);
+    gtk_box_append(GTK_BOX(page), card);
     return page;
 }
 
-/* Monta a aba Tensão; as linhas de domínio são guardadas separadamente para poder ocultá-las dinamicamente. */
+/* Monta a aba Tensão mantendo a detecção dinâmica de domínios do backend. */
 static GtkWidget *build_undervolt_page(AppState *state) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_top(page, 16);
-    gtk_widget_set_margin_bottom(page, 16);
-    gtk_widget_set_margin_start(page, 16);
-    gtk_widget_set_margin_end(page, 16);
+    gtk_widget_set_margin_top(page, 4);
 
-    GtkWidget *description = new_left_label(
-        "Controle de offset de tensão para CPUs Intel compatíveis, usando intel-undervolt.");
-    gtk_label_set_wrap(GTK_LABEL(description), TRUE);
-    gtk_box_append(GTK_BOX(page), description);
+    GtkWidget *content = NULL;
+    GtkWidget *card =
+        section_card("V",
+                     "badge-purple",
+                     "Controle de tensão",
+                     "Use offsets negativos pequenos e teste estabilidade. Após a leitura, somente domínios realmente expostos pelo hardware permanecem visíveis.",
+                     &content);
 
-    GtkWidget *warning = new_left_label(
-        "Use valores negativos pequenos e teste estabilidade. Algumas BIOS/CPUs bloqueiam "
-        "undervolt; nesse caso o backend recusará a aplicação.");
-    gtk_label_set_wrap(GTK_LABEL(warning), TRUE);
-    gtk_widget_add_css_class(warning, "warning");
-    gtk_box_append(GTK_BOX(page), warning);
+    state->undervolt_backend_label =
+        styled_label("Backend: detectando...", "field-help", 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(state->undervolt_backend_label), TRUE);
+    gtk_box_append(GTK_BOX(content), state->undervolt_backend_label);
 
-    state->undervolt_backend_label = new_left_label("Backend: detectando...");
-    gtk_box_append(GTK_BOX(page), state->undervolt_backend_label);
-
-    GtkWidget *frame = gtk_frame_new("Offsets de tensão");
     state->undervolt_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_top(state->undervolt_controls, 12);
-    gtk_widget_set_margin_bottom(state->undervolt_controls, 12);
-    gtk_widget_set_margin_start(state->undervolt_controls, 12);
-    gtk_widget_set_margin_end(state->undervolt_controls, 12);
-
     GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 14);
 
     for (size_t index = 0; index < UNDERVOLT_DOMAIN_COUNT; ++index) {
         state->undervolt_domain_labels[index] =
-            new_left_label(UNDERVOLT_DOMAIN_NAMES[index]);
+            styled_label(UNDERVOLT_DOMAIN_NAMES[index], "field-label", 0.0F);
         state->undervolt_spins[index] =
             new_spin(UNDERVOLT_MIN_MV, UNDERVOLT_MAX_MV, 1.0, 2);
-        state->undervolt_domain_units[index] = new_left_label("mV");
+        gtk_widget_add_css_class(state->undervolt_spins[index], "field-spin");
+        state->undervolt_domain_units[index] =
+            styled_label("mV", "unit-chip", 0.5F);
 
         gtk_grid_attach(GTK_GRID(grid),
                         state->undervolt_domain_labels[index],
@@ -971,30 +1223,34 @@ static GtkWidget *build_undervolt_page(AppState *state) {
         gtk_check_button_new_with_label("Reaplicar automaticamente no boot");
     gtk_box_append(GTK_BOX(state->undervolt_controls), state->undervolt_boot_check);
 
-    GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
+    gtk_widget_add_css_class(actions, "action-row");
     GtkWidget *read = gtk_button_new_with_label("Ler hardware");
     GtkWidget *apply = gtk_button_new_with_label("Salvar e aplicar");
     GtkWidget *zero = gtk_button_new_with_label("Colocar tudo em 0 mV");
     GtkWidget *refresh = gtk_button_new_with_label("Redetectar backend");
+    gtk_widget_add_css_class(apply, "suggested-action");
+
     g_signal_connect(read, "clicked", G_CALLBACK(on_undervolt_read), state);
     g_signal_connect(apply, "clicked", G_CALLBACK(on_undervolt_apply), state);
     g_signal_connect(zero, "clicked", G_CALLBACK(on_undervolt_zero), state);
     g_signal_connect(refresh, "clicked", G_CALLBACK(on_undervolt_refresh), state);
-    gtk_box_append(GTK_BOX(buttons), read);
-    gtk_box_append(GTK_BOX(buttons), apply);
-    gtk_box_append(GTK_BOX(buttons), zero);
-    gtk_box_append(GTK_BOX(buttons), refresh);
-    gtk_box_append(GTK_BOX(state->undervolt_controls), buttons);
 
-    gtk_frame_set_child(GTK_FRAME(frame), state->undervolt_controls);
-    gtk_box_append(GTK_BOX(page), frame);
+    gtk_box_append(GTK_BOX(actions), read);
+    gtk_box_append(GTK_BOX(actions), apply);
+    gtk_box_append(GTK_BOX(actions), zero);
+    gtk_box_append(GTK_BOX(actions), refresh);
+    gtk_box_append(GTK_BOX(state->undervolt_controls), actions);
 
-    GtkWidget *backend_note = new_left_label(
-        "O programa nunca envia offset positivo pela interface. Alterações em /etc são feitas "
-        "por pkexec; a GUI continua executando como usuário comum.");
-    gtk_label_set_wrap(GTK_LABEL(backend_note), TRUE);
-    gtk_box_append(GTK_BOX(page), backend_note);
+    GtkWidget *note =
+        styled_label("A GUI nunca envia offset positivo. Alterações em /etc são feitas por pkexec; o aplicativo continua executando como usuário comum.",
+                     "field-help",
+                     0.0F);
+    gtk_label_set_wrap(GTK_LABEL(note), TRUE);
+    gtk_box_append(GTK_BOX(state->undervolt_controls), note);
 
+    gtk_box_append(GTK_BOX(content), state->undervolt_controls);
+    gtk_box_append(GTK_BOX(page), card);
     return page;
 }
 
@@ -1033,9 +1289,11 @@ static void activate(GtkApplication *application, gpointer user_data) {
         cpu_config_defaults(&state->config);
     }
 
+    install_application_css();
+
     state->window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(state->window), "CPU Switch Control");
-    gtk_window_set_default_size(GTK_WINDOW(state->window), 820, 720);
+    gtk_window_set_default_size(GTK_WINDOW(state->window), 1220, 860);
     g_object_set_data_full(G_OBJECT(state->window), "cpu-switch-state", state, app_state_free);
 
     GtkWidget *scroller = gtk_scrolled_window_new();
@@ -1044,34 +1302,44 @@ static void activate(GtkApplication *application, gpointer user_data) {
                                    GTK_POLICY_AUTOMATIC);
     gtk_window_set_child(GTK_WINDOW(state->window), scroller);
 
-    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_top(root, 16);
-    gtk_widget_set_margin_bottom(root, 16);
-    gtk_widget_set_margin_start(root, 16);
-    gtk_widget_set_margin_end(root, 16);
+    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+    gtk_widget_add_css_class(root, "app-root");
+    gtk_widget_set_margin_top(root, 18);
+    gtk_widget_set_margin_bottom(root, 18);
+    gtk_widget_set_margin_start(root, 18);
+    gtk_widget_set_margin_end(root, 18);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), root);
 
-    GtkWidget *title = new_left_label("CPU Switch Control");
-    gtk_widget_add_css_class(title, "title-1");
-    gtk_box_append(GTK_BOX(root), title);
+    gtk_box_append(GTK_BOX(root), build_hero_header());
+    gtk_box_append(GTK_BOX(root), build_status_banner(state));
 
-    state->status_label = new_left_label("");
-    gtk_label_set_wrap(GTK_LABEL(state->status_label), TRUE);
-    gtk_box_append(GTK_BOX(root), state->status_label);
+    GtkWidget *stack = gtk_stack_new();
+    gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+    gtk_stack_set_transition_duration(GTK_STACK(stack), 160);
 
-    GtkWidget *notebook = gtk_notebook_new();
-    gtk_widget_set_vexpand(notebook, TRUE);
     GtkWidget *frequency_page = build_frequency_page(state);
     GtkWidget *undervolt_page = build_undervolt_page(state);
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), frequency_page, gtk_label_new("Frequência"));
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), undervolt_page, gtk_label_new("Tensão"));
-    gtk_box_append(GTK_BOX(root), notebook);
+    gtk_stack_add_titled(GTK_STACK(stack), frequency_page, "frequency", "Frequência");
+    gtk_stack_add_titled(GTK_STACK(stack), undervolt_page, "voltage", "Tensão");
+
+    GtkWidget *switcher = gtk_stack_switcher_new();
+    gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
+    gtk_widget_set_halign(switcher, GTK_ALIGN_START);
+    gtk_widget_add_css_class(switcher, "modern-switcher");
+    gtk_box_append(GTK_BOX(root), switcher);
+
+    gtk_box_append(GTK_BOX(root), build_metric_cards(state));
+
+    gtk_widget_set_vexpand(stack, TRUE);
+    gtk_box_append(GTK_BOX(root), stack);
 
     refresh_hardware_detection(state, FALSE);
     refresh_undervolt_backend(state);
 
     if (config_error[0] != '\0') {
         set_status(state, config_error, TRUE);
+    } else {
+        set_status(state, NULL, FALSE);
     }
 
     refresh_metrics(state);
