@@ -32,6 +32,18 @@ int undervolt_write_config_copy(const char *source,
                                 char *error,
                                 size_t error_size);
 
+/*
+ * Same operation, but only domains marked as present are changed/created.
+ * Unmarked domains already present in SOURCE are preserved byte-for-byte.
+ */
+int undervolt_write_config_copy_masked(
+    const char *source,
+    const char *destination,
+    const double offsets[UNDERVOLT_DOMAIN_COUNT],
+    const unsigned char present[UNDERVOLT_DOMAIN_COUNT],
+    char *error,
+    size_t error_size);
+
 /* Reject positive offsets and values outside the UI's supported range. */
 int undervolt_validate(const double offsets[UNDERVOLT_DOMAIN_COUNT],
                        char *error,
@@ -44,5 +56,14 @@ int undervolt_validate(const double offsets[UNDERVOLT_DOMAIN_COUNT],
  */
 size_t undervolt_parse_read_output(const char *output,
                                    double offsets[UNDERVOLT_DOMAIN_COUNT]);
+
+/*
+ * Parse hardware output and additionally mark exactly which voltage domains
+ * intel-undervolt reported. The present array is cleared before parsing.
+ */
+size_t undervolt_parse_read_output_masked(
+    const char *output,
+    double offsets[UNDERVOLT_DOMAIN_COUNT],
+    unsigned char present[UNDERVOLT_DOMAIN_COUNT]);
 
 #endif
