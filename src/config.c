@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - config.c
+ *
+ * Leitura, gravação e validação da configuração do daemon de frequência.
+ * O formato JSON é propositalmente pequeno; o parser lê apenas as chaves que o
+ * programa conhece, mantendo o código sem dependência de uma biblioteca JSON.
+ */
+
 #include "config.h"
 
 #include <ctype.h>
