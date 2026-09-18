@@ -47,6 +47,7 @@ jobs:
           test -x squashfs-root/AppRun
           test -x squashfs-root/usr/bin/cpu-switch-control
           test -x squashfs-root/usr/bin/cpu-clock-switch-daemon
+          test -x squashfs-root/usr/lib/cpu-switch-control/ensure-system-components.sh
           test -x squashfs-root/usr/lib/cpu-switch-control/install-system-components.sh
           test -f squashfs-root/usr/share/cpu-switch-control/cpu-clock-switch.service
           test -f squashfs-root/usr/share/cpu-switch-control/cpu-clock-switch.json
