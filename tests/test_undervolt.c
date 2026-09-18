@@ -10,6 +10,7 @@
 #include "undervolt.h"
 
 #include <assert.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,12 @@ static char *read_file(const char *path) {
 }
 
 int main(void) {
+    /*
+     * Respeita a locale do ambiente para reproduzir a execução real da GUI.
+     * No CI este teste também roda com pt_BR.UTF-8, onde o separador é vírgula.
+     */
+    assert(setlocale(LC_ALL, "") != NULL);
+
     /* 1) Valores negativos dentro da faixa são aceitos; overvolt é rejeitado. */
     double offsets[UNDERVOLT_DOMAIN_COUNT] = {-70.0, 0.0, -60.5, 0.0, 0.0};
     char error[256] = {0};
