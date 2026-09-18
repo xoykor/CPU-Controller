@@ -264,6 +264,103 @@ static void refresh_hardware_detection(AppState *state, gboolean report_success)
  * This keeps the GUI itself unprivileged and makes the privileged action small
  * and easy to audit.
  */
+/*
+ * Verifica se o systemd conhece a unit do daemon.
+ *
+ * "is-active" sozinho não distingue bem uma unit ausente de uma unit apenas
+ * parada. "systemctl cat" falha somente quando a definição da unit não existe.
+ */
+static gboolean frequency_service_is_installed(void) {
+    char *argv[] = {
+        (char *)"systemctl",
+        (char *)"cat",
+        (char *)SERVICE_NAME,
+        NULL,
+    };
+
+    CommandResult result;
+    gboolean installed = command_run(argv, &result);
+    command_result_clear(&result);
+    return installed;
+}
+
+/*
+ * Quando a GUI está rodando de um AppImage, CPU_SWITCH_APPDIR aponta para o
+ * AppDir montado. O script de setup copia os componentes para um staging normal
+ * em /tmp antes de chamar pkexec, evitando a limitação de acesso ao mount FUSE.
+ */
+static gboolean ensure_frequency_service(AppState *state, char **detail) {
+    if (detail != NULL) {
+        *detail = NULL;
+    }
+
+    if (frequency_service_is_installed()) {
+        return TRUE;
+    }
+
+    const char *appdir = g_getenv("CPU_SWITCH_APPDIR");
+    if (appdir == NULL || *appdir == '\0') {
+        if (detail != NULL) {
+            *detail = g_strdup(
+                "O serviço cpu-clock-switch não está instalado. "
+                "Reinstale o programa ou use o AppImage atualizado.");
+        }
+        return FALSE;
+    }
+
+    char *setup_script = g_build_filename(appdir,
+                                          "usr",
+                                          "lib",
+                                          "cpu-switch-control",
+                                          "ensure-system-components.sh",
+                                          NULL);
+
+    if (!g_file_test(setup_script, G_FILE_TEST_IS_EXECUTABLE)) {
+        if (detail != NULL) {
+            *detail = g_strdup(
+                "O AppImage não contém o instalador do serviço. "
+                "Use uma versão mais recente do CPU Switch Control.");
+        }
+        g_free(setup_script);
+        return FALSE;
+    }
+
+    char *argv[] = {setup_script, NULL};
+    CommandResult result;
+    gboolean ok = command_run(argv, &result);
+
+    if (!ok && detail != NULL) {
+        *detail = g_strdup(command_failure_detail(&result));
+    }
+    command_result_clear(&result);
+    g_free(setup_script);
+
+    if (!ok) {
+        return FALSE;
+    }
+
+    if (!frequency_service_is_installed()) {
+        if (detail != NULL) {
+            *detail = g_strdup(
+                "A instalação terminou, mas o systemd ainda não encontrou "
+                "cpu-clock-switch.service.");
+        }
+        return FALSE;
+    }
+
+    /*
+     * Atualiza imediatamente o rótulo da GUI. O timer também faria isso depois,
+     * mas a resposta instantânea deixa claro que o reparo funcionou.
+     */
+    char *service_state = command_systemctl_state("is-active", SERVICE_NAME);
+    char *label = g_strdup_printf("Serviço: %s", service_state);
+    gtk_label_set_text(GTK_LABEL(state->service_label), label);
+    g_free(label);
+    g_free(service_state);
+
+    return TRUE;
+}
+
 /* Valida, grava em arquivo temporário e instala a configuração em /etc usando privilégio apenas no passo final. */
 static gboolean save_frequency_config(AppState *state, gboolean restart_service) {
     if (!state->have_frequency_range) {
@@ -325,6 +422,22 @@ static gboolean save_frequency_config(AppState *state, gboolean restart_service)
     g_free(detail);
 
     if (restart_service) {
+        /*
+         * AppImages antigos podiam abrir sem conseguir instalar a unit porque
+         * pkexec não tinha acesso ao mount FUSE. Repara a integração aqui antes
+         * de tentar reiniciar, para o botão funcionar também nesse cenário.
+         */
+        if (!ensure_frequency_service(state, &detail)) {
+            set_status(state,
+                       detail != NULL ? detail
+                                      : "Não foi possível instalar o serviço de frequência.",
+                       TRUE);
+            g_free(detail);
+            return FALSE;
+        }
+        g_free(detail);
+        detail = NULL;
+
         char *restart_argv[] = {
             (char *)"systemctl",
             (char *)"restart",
@@ -415,6 +528,12 @@ static gboolean refresh_metrics(gpointer user_data) {
 /* Consulta o systemd periodicamente para mostrar o estado real do daemon. */
 static gboolean refresh_service_status(gpointer user_data) {
     AppState *state = user_data;
+
+    if (!frequency_service_is_installed()) {
+        gtk_label_set_text(GTK_LABEL(state->service_label), "Serviço: não instalado");
+        return G_SOURCE_CONTINUE;
+    }
+
     char *service_state = command_systemctl_state("is-active", SERVICE_NAME);
     char *label = g_strdup_printf("Serviço: %s", service_state);
     gtk_label_set_text(GTK_LABEL(state->service_label), label);
