@@ -1,3 +1,10 @@
+/*
+ * CPU Switch Control - command.h
+ *
+ * Interface pública da camada de execução de comandos. Este cabeçalho evita que
+ * a GUI precise conhecer detalhes de g_spawn, wait status ou pkexec.
+ */
+
 #ifndef CPU_SWITCH_COMMAND_H
 #define CPU_SWITCH_COMMAND_H
 
