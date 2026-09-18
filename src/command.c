@@ -1,3 +1,12 @@
+/*
+ * CPU Switch Control - command.c
+ *
+ * Camada responsável por executar processos externos usados pela interface.
+ * A GUI permanece sem privilégios; quando uma ação administrativa é necessária,
+ * este módulo monta a chamada via pkexec e devolve stdout, stderr e status de
+ * saída de forma previsível para a camada gráfica.
+ */
+
 #include "command.h"
 
 #include <string.h>
