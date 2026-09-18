@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "config.h"
 
 #include <assert.h>
@@ -5,9 +7,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+/* Basic round-trip tests keep the hand-written tiny JSON parser honest. */
 int main(void) {
     CpuConfig config;
     cpu_config_defaults(&config);
+
     assert(config.low_threshold_pct == 6.0);
     assert(config.high_threshold_pct == 10.0);
     assert(config.low_frequency_khz == 1200000);
@@ -21,7 +25,7 @@ int main(void) {
     config.high_threshold_pct = 10.0;
     assert(cpu_config_validate(&config, 800000, 4000000, 1, error, sizeof(error)) != 0);
 
-    char path[] = "/tmp/cpu-switch-test-XXXXXX";
+    char path[] = "/tmp/cpu-switch-config-XXXXXX";
     int fd = mkstemp(path);
     assert(fd >= 0);
     close(fd);
@@ -35,8 +39,8 @@ int main(void) {
     assert(cpu_config_load(path, &loaded, error, sizeof(error)) == 0);
     assert(loaded.low_frequency_khz == 900000);
     assert(loaded.high_frequency_khz == 3900000);
-    unlink(path);
 
+    unlink(path);
     puts("config tests: ok");
     return 0;
 }
