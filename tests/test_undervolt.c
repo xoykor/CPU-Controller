@@ -64,13 +64,59 @@ int main(void) {
     free(rewritten);
 
     double parsed[UNDERVOLT_DOMAIN_COUNT];
+    unsigned char present[UNDERVOLT_DOMAIN_COUNT];
     undervolt_defaults(parsed);
-    size_t found = undervolt_parse_read_output(
-        "CPU (0): -70.31 mV\nGPU (1): 0.00 mV\nCPU Cache (2): -60.55 mV\n",
-        parsed);
+    size_t found = undervolt_parse_read_output_masked(
+        "CPU (0): -70.31 mV\nCACHE (2): -60.55 mV\nUncore (3): -25.00 mV\n",
+        parsed,
+        present);
     assert(found == 3);
+    assert(present[0] == 1);
+    assert(present[1] == 0);
+    assert(present[2] == 1);
+    assert(present[3] == 1);
+    assert(present[4] == 0);
     assert(parsed[0] < -70.30 && parsed[0] > -70.32);
     assert(parsed[2] < -60.54 && parsed[2] > -60.56);
+    assert(parsed[3] < -24.99 && parsed[3] > -25.01);
+
+    char masked_source[] = "/tmp/intel-undervolt-masked-source-XXXXXX";
+    int masked_source_fd = mkstemp(masked_source);
+    assert(masked_source_fd >= 0);
+    FILE *masked_source_file = fdopen(masked_source_fd, "w");
+    assert(masked_source_file != NULL);
+    fputs("undervolt 0 'CPU' -10\n"
+          "undervolt 1 'GPU' -5\n"
+          "undervolt 2 'CPU Cache' -20\n"
+          "undervolt 3 'Uncore' -15\n"
+          "undervolt 4 'Analog I/O' -7\n",
+          masked_source_file);
+    fclose(masked_source_file);
+
+    char masked_destination[] = "/tmp/intel-undervolt-masked-dest-XXXXXX";
+    int masked_destination_fd = mkstemp(masked_destination);
+    assert(masked_destination_fd >= 0);
+    close(masked_destination_fd);
+
+    double masked_offsets[UNDERVOLT_DOMAIN_COUNT] = {-70.0, 0.0, -60.5, -25.0, 0.0};
+    unsigned char masked_present[UNDERVOLT_DOMAIN_COUNT] = {1, 0, 1, 1, 0};
+    assert(undervolt_write_config_copy_masked(masked_source,
+                                              masked_destination,
+                                              masked_offsets,
+                                              masked_present,
+                                              error,
+                                              sizeof(error)) == 0);
+
+    char *masked_rewritten = read_file(masked_destination);
+    assert(strstr(masked_rewritten, "undervolt 0 'CPU' -70.00") != NULL);
+    assert(strstr(masked_rewritten, "undervolt 1 'GPU' -5") != NULL);
+    assert(strstr(masked_rewritten, "undervolt 2 'CPU Cache' -60.50") != NULL);
+    assert(strstr(masked_rewritten, "undervolt 3 'Uncore' -25.00") != NULL);
+    assert(strstr(masked_rewritten, "undervolt 4 'Analog I/O' -7") != NULL);
+    free(masked_rewritten);
+
+    unlink(masked_source);
+    unlink(masked_destination);
 
     unlink(source);
     unlink(destination);
