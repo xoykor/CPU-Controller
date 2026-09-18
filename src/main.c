@@ -45,7 +45,11 @@ typedef struct {
     GtkWidget *undervolt_backend_label;
     GtkWidget *undervolt_controls;
     GtkWidget *undervolt_spins[UNDERVOLT_DOMAIN_COUNT];
+    GtkWidget *undervolt_domain_labels[UNDERVOLT_DOMAIN_COUNT];
+    GtkWidget *undervolt_domain_units[UNDERVOLT_DOMAIN_COUNT];
     GtkWidget *undervolt_boot_check;
+    unsigned char undervolt_present[UNDERVOLT_DOMAIN_COUNT];
+    gboolean undervolt_domains_detected;
 
     CpuConfig config;
     uint64_t min_khz;
@@ -407,7 +411,21 @@ static void undervolt_widgets_to_values(
     }
 }
 
+static void update_undervolt_domain_visibility(AppState *state) {
+    for (size_t index = 0; index < UNDERVOLT_DOMAIN_COUNT; ++index) {
+        gboolean visible =
+            !state->undervolt_domains_detected || state->undervolt_present[index] != 0;
+        gtk_widget_set_visible(state->undervolt_domain_labels[index], visible);
+        gtk_widget_set_visible(state->undervolt_spins[index], visible);
+        gtk_widget_set_visible(state->undervolt_domain_units[index], visible);
+    }
+}
+
 static void refresh_undervolt_backend(AppState *state) {
+    state->undervolt_domains_detected = FALSE;
+    memset(state->undervolt_present, 0, sizeof(state->undervolt_present));
+    update_undervolt_domain_visibility(state);
+
     g_clear_pointer(&state->undervolt_program, g_free);
     state->undervolt_program = g_find_program_in_path("intel-undervolt");
 
@@ -474,16 +492,24 @@ static void on_undervolt_read(GtkButton *button, gpointer user_data) {
     }
 
     double offsets[UNDERVOLT_DOMAIN_COUNT];
+    unsigned char present[UNDERVOLT_DOMAIN_COUNT];
     undervolt_defaults(offsets);
-    size_t found = undervolt_parse_read_output(result.stdout_text, offsets);
+    size_t found =
+        undervolt_parse_read_output_masked(result.stdout_text, offsets, present);
     if (found == 0) {
         set_status(state,
                    "O backend respondeu, mas nenhum domínio de tensão pôde ser interpretado.",
                    TRUE);
     } else {
+        memcpy(state->undervolt_present, present, sizeof(state->undervolt_present));
+        state->undervolt_domains_detected = TRUE;
+        update_undervolt_domain_visibility(state);
         undervolt_values_to_widgets(state, offsets);
-        char *message =
-            g_strdup_printf("Valores atuais lidos do hardware: %zu domínio(s).", found);
+
+        char *message = g_strdup_printf(
+            "Hardware detectado: %zu domínio(s) de tensão suportado(s). "
+            "Domínios ausentes foram ocultados e não serão alterados.",
+            found);
         set_status(state, message, FALSE);
         g_free(message);
     }
@@ -515,11 +541,14 @@ static gboolean write_and_apply_undervolt(AppState *state) {
     close(fd);
 
     /* Preserve every non-voltage setting already present in the backend file. */
-    if (undervolt_write_config_copy(UNDERVOLT_CONFIG_PATH,
-                                    temporary_path,
-                                    offsets,
-                                    error,
-                                    sizeof(error)) != 0) {
+    const unsigned char *present =
+        state->undervolt_domains_detected ? state->undervolt_present : NULL;
+    if (undervolt_write_config_copy_masked(UNDERVOLT_CONFIG_PATH,
+                                           temporary_path,
+                                           offsets,
+                                           present,
+                                           error,
+                                           sizeof(error)) != 0) {
         set_status(state, error, TRUE);
         g_unlink(temporary_path);
         g_free(temporary_path);
@@ -748,13 +777,30 @@ static GtkWidget *build_undervolt_page(AppState *state) {
     gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
 
     for (size_t index = 0; index < UNDERVOLT_DOMAIN_COUNT; ++index) {
+        state->undervolt_domain_labels[index] =
+            new_left_label(UNDERVOLT_DOMAIN_NAMES[index]);
         state->undervolt_spins[index] =
             new_spin(UNDERVOLT_MIN_MV, UNDERVOLT_MAX_MV, 1.0, 2);
-        grid_add_row(grid,
-                     (int)index,
-                     UNDERVOLT_DOMAIN_NAMES[index],
-                     state->undervolt_spins[index],
-                     "mV");
+        state->undervolt_domain_units[index] = new_left_label("mV");
+
+        gtk_grid_attach(GTK_GRID(grid),
+                        state->undervolt_domain_labels[index],
+                        0,
+                        (int)index,
+                        1,
+                        1);
+        gtk_grid_attach(GTK_GRID(grid),
+                        state->undervolt_spins[index],
+                        1,
+                        (int)index,
+                        1,
+                        1);
+        gtk_grid_attach(GTK_GRID(grid),
+                        state->undervolt_domain_units[index],
+                        2,
+                        (int)index,
+                        1,
+                        1);
     }
     gtk_box_append(GTK_BOX(state->undervolt_controls), grid);
 
