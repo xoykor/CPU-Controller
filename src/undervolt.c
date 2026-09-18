@@ -13,7 +13,7 @@ const char *UNDERVOLT_DOMAIN_NAMES[UNDERVOLT_DOMAIN_COUNT] = {
     "CPU",
     "GPU",
     "CPU Cache",
-    "System Agent",
+    "Uncore",
     "Analog I/O",
 };
 
