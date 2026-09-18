@@ -1,36 +1,83 @@
-# CPU Auto Switch
+# CPU Switch Control
 
-Aplicativo desktop em Rust para configurar o serviço `cpu-clock-switch`.
+Controlador de CPU para Linux escrito em **C17**. A interface usa GTK4 e o daemon de frequência usa apenas libc/Linux.
 
-## O que a interface faz
+## Recursos
 
-- Detecta automaticamente as políticas `cpufreq` e a faixa comum de frequência do processador.
-- Mostra uso e frequência atuais.
-- Permite escolher a frequência de baixa carga e de alta carga dentro da faixa detectada.
-- Permite escolher os limites de uso que ativam cada modo.
-- Permite ajustar o intervalo de leitura.
-- Salva a configuração em `/etc/cpu-clock-switch.json` e pode reiniciar o serviço usando `pkexec`.
+- Detecta automaticamente as políticas `cpufreq` e a faixa comum do processador.
+- Exibe uso e frequência atuais.
+- Alterna entre clock de baixa e alta carga com histerese configurável.
+- Mantém compatibilidade com `/etc/cpu-clock-switch.json` usado pelas versões anteriores.
+- Painel de undervolt Intel com cinco domínios: CPU, GPU, CPU Cache, System Agent e Analog I/O.
+- Usa `intel-undervolt` como backend quando ele está instalado e o firmware permite o ajuste.
+- Não permite overvolt pela interface: os offsets aceitos ficam entre `-150` e `0 mV`.
+- Pode habilitar `intel-undervolt.service` para reaplicar a configuração no boot.
+- Operações privilegiadas da interface passam por `pkexec`.
 
-O serviço usa histerese: o modo baixo é ativado abaixo do limite inferior e o modo alto acima do limite superior. Entre os dois limites, ele mantém o estado atual para evitar oscilações.
+## Dependências
 
-## Compilar e instalar
+### Arch Linux / CachyOS
 
-```bash
-cargo build --release
-sudo ./install.sh
+```sh
+sudo pacman -S --needed base-devel gtk4 polkit
+```
+
+Para o painel de tensão Intel:
+
+```sh
+sudo pacman -S --needed intel-undervolt
+```
+
+O painel de frequência funciona sem `intel-undervolt`.
+
+## Compilar
+
+```sh
+make
+make test
+```
+
+## Instalar
+
+```sh
+sudo make install
+sudo make enable
+```
+
+Depois execute:
+
+```sh
 cpu-switch-control
 ```
 
-O instalador instala o aplicativo em `/usr/local/bin/cpu-switch-control`, o daemon em `/usr/local/bin/cpu-clock-switch.py`, a unidade systemd e uma configuração inicial.
-Também instala o ícone e o lançador do menu em `/usr/share/icons/hicolor` e `/usr/share/applications`.
+O serviço instalado é `cpu-clock-switch.service` e executa `/usr/local/bin/cpu-clock-switch-daemon`.
 
-O serviço precisa executar como root para escrever nos controles de frequência em `/sys`. O aplicativo usa `pkexec` somente ao salvar no arquivo do sistema ou reiniciar o serviço.
+## Configuração
 
-## Desenvolvimento
+A frequência continua configurada em:
 
-```bash
-cargo test
-cargo run
+```text
+/etc/cpu-clock-switch.json
 ```
 
-O serviço antigo `cpu-autoscale.service` não deve permanecer ativo junto com este serviço, pois ambos alteram os mesmos controles de frequência.
+O undervolt Intel usa o arquivo padrão do backend:
+
+```text
+/etc/intel-undervolt.conf
+```
+
+Ao editar tensão, o aplicativo preserva as demais linhas já existentes em `intel-undervolt.conf` e substitui apenas os cinco registros `undervolt`.
+
+## Como funciona a histerese
+
+Se o uso total cair abaixo do limite inferior, o daemon fixa o clock selecionado para baixa carga. Se subir acima do limite superior, fixa o clock selecionado para alta carga. Entre os dois limites, mantém o estado anterior para evitar oscilações.
+
+## Migração da versão Rust/Python
+
+A versão atual não usa Cargo, Rust nem Python. Os binários são compilados diretamente de:
+
+- `src/main.c` — interface GTK4 e controle de tensão.
+- `src/daemon.c` — daemon de frequência.
+- `src/config.c` — parser/validador compartilhado da configuração.
+
+O JSON antigo é reutilizado automaticamente.
