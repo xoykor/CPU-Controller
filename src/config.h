@@ -1,3 +1,10 @@
+/*
+ * CPU Switch Control - config.h
+ *
+ * Estruturas e funções compartilhadas pela GUI, pelos testes e pelo daemon para
+ * representar a configuração de frequência de maneira única.
+ */
+
 #ifndef CPU_SWITCH_CONFIG_H
 #define CPU_SWITCH_CONFIG_H
 
