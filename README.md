@@ -1,36 +1,92 @@
-# CPU Auto Switch
+# CPU Switch Control
 
-Aplicativo desktop em Rust para configurar o serviço `cpu-clock-switch`.
+Controlador de CPU para Linux escrito em **C17**, com interface GTK4 e daemon nativo em C.
 
-## O que a interface faz
+## Recursos
 
-- Detecta automaticamente as políticas `cpufreq` e a faixa comum de frequência do processador.
-- Mostra uso e frequência atuais.
-- Permite escolher a frequência de baixa carga e de alta carga dentro da faixa detectada.
-- Permite escolher os limites de uso que ativam cada modo.
-- Permite ajustar o intervalo de leitura.
-- Salva a configuração em `/etc/cpu-clock-switch.json` e pode reiniciar o serviço usando `pkexec`.
+- Detecta automaticamente as políticas `cpufreq` e a faixa comum de frequência.
+- Exibe uso e frequência atuais.
+- Alterna entre clock de baixa e alta carga com histerese configurável.
+- Mantém compatibilidade com `/etc/cpu-clock-switch.json` das versões anteriores.
+- Painel de undervolt Intel com CPU, GPU, CPU Cache, System Agent e Analog I/O.
+- Usa `intel-undervolt` como backend quando ele está instalado e o firmware permite.
+- A interface nunca permite offset positivo; a faixa exposta é de `-150` a `0 mV`.
+- Pode habilitar `intel-undervolt.service` para reaplicar a tensão no boot.
+- A GUI roda sem root e usa `pkexec` somente nas operações que realmente precisam de privilégio.
 
-O serviço usa histerese: o modo baixo é ativado abaixo do limite inferior e o modo alto acima do limite superior. Entre os dois limites, ele mantém o estado atual para evitar oscilações.
+## Organização do código
 
-## Compilar e instalar
+O projeto foi dividido para que cada arquivo tenha uma responsabilidade clara:
 
-```bash
-cargo build --release
-sudo ./install.sh
+- `src/main.c`: interface GTK4 e callbacks.
+- `src/config.c` / `config.h`: leitura, escrita e validação do JSON.
+- `src/cpu_linux.c` / `cpu_linux.h`: acesso a `/proc` e `/sys/.../cpufreq`.
+- `src/command.c` / `command.h`: execução de comandos, `pkexec` e systemd.
+- `src/undervolt.c` / `undervolt.h`: leitura e atualização de `intel-undervolt.conf`.
+- `src/daemon.c`: loop de histerese do serviço de frequência.
+
+Os pontos menos óbvios do código têm comentários explicando a intenção, principalmente ordem de escrita do cpufreq, histerese, preservação da configuração de undervolt e fronteiras de privilégio.
+
+## Dependências
+
+### Arch Linux / CachyOS
+
+```sh
+sudo pacman -S --needed base-devel gtk4 polkit
+```
+
+Para habilitar o painel de tensão Intel:
+
+```sh
+sudo pacman -S --needed intel-undervolt
+```
+
+A parte de frequência funciona mesmo sem `intel-undervolt`.
+
+## Compilar e testar
+
+```sh
+make test
+make
+```
+
+O build usa C17 com `-Wall -Wextra -Wpedantic`.
+
+## Instalar
+
+```sh
+sudo make install
+sudo make enable
+```
+
+Depois execute:
+
+```sh
 cpu-switch-control
 ```
 
-O instalador instala o aplicativo em `/usr/local/bin/cpu-switch-control`, o daemon em `/usr/local/bin/cpu-clock-switch.py`, a unidade systemd e uma configuração inicial.
-Também instala o ícone e o lançador do menu em `/usr/share/icons/hicolor` e `/usr/share/applications`.
+## Configuração
 
-O serviço precisa executar como root para escrever nos controles de frequência em `/sys`. O aplicativo usa `pkexec` somente ao salvar no arquivo do sistema ou reiniciar o serviço.
+A frequência usa:
 
-## Desenvolvimento
-
-```bash
-cargo test
-cargo run
+```text
+/etc/cpu-clock-switch.json
 ```
 
-O serviço antigo `cpu-autoscale.service` não deve permanecer ativo junto com este serviço, pois ambos alteram os mesmos controles de frequência.
+O undervolt usa o arquivo padrão do backend:
+
+```text
+/etc/intel-undervolt.conf
+```
+
+Ao salvar tensão, a aplicação preserva comentários e configurações não relacionadas e substitui apenas as cinco linhas `undervolt`.
+
+## Histerese
+
+O daemon trabalha em três regiões:
+
+- uso abaixo do limite inferior: aplica o clock de baixa carga;
+- uso acima do limite superior: aplica o clock de alta carga;
+- uso entre os dois limites: mantém o estado anterior.
+
+Isso evita ficar alternando rapidamente de frequência quando o uso oscila perto de um limite.
