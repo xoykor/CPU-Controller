@@ -7,6 +7,7 @@
 
 set -eu
 
+# APPDIR é fornecido pelo runtime AppImage; o fallback facilita testes do AppDir.
 if [ -n "${APPDIR:-}" ]; then
     APPROOT="$APPDIR"
 else
@@ -16,6 +17,7 @@ fi
 export CPU_SWITCH_APPDIR="$APPROOT"
 export PATH="$APPROOT/usr/bin:${PATH:-/usr/bin:/bin}"
 
+# Acrescenta diretórios somente quando existem, evitando entradas inválidas no loader.
 prepend_library_path() {
     directory="$1"
     [ -d "$directory" ] || return 0
@@ -30,9 +32,11 @@ prepend_library_path "$APPROOT/usr/lib"
 prepend_library_path "$APPROOT/usr/lib/x86_64-linux-gnu"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 
+# GTK procura schemas, ícones e outros dados pelo XDG_DATA_DIRS.
 export XDG_DATA_DIRS="$APPROOT/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # linuxdeploy plugins (notably the GTK plugin) install runtime environment hooks here.
+# Plugins do linuxdeploy podem deixar hooks para preparar GTK antes de iniciar a GUI.
 if [ -d "$APPROOT/apprun-hooks" ]; then
     for hook in "$APPROOT"/apprun-hooks/*; do
         [ -f "$hook" ] || continue
@@ -44,6 +48,7 @@ fi
 # The GUI can live inside the AppImage, but systemd cannot run a daemon from the
 # temporary AppImage mount after it is unmounted. Keep a synchronized system
 # copy. CPU_SWITCH_SKIP_SYSTEM_SETUP=1 disables this first-run/update prompt.
+# O daemon precisa de caminho persistente para o systemd; por isso é sincronizado fora do mount temporário.
 if [ "${CPU_SWITCH_SKIP_SYSTEM_SETUP:-0}" != "1" ] &&
    [ -d /run/systemd/system ] &&
    command -v pkexec >/dev/null 2>&1; then
@@ -65,4 +70,5 @@ if [ "${CPU_SWITCH_SKIP_SYSTEM_SETUP:-0}" != "1" ] &&
     fi
 fi
 
+# Substitui o shell pela GUI para que sinais e código de saída sejam propagados corretamente.
 exec "$APPROOT/usr/bin/cpu-switch-control" "$@"
