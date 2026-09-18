@@ -13,8 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-4-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev locales
+          sudo locale-gen pt_BR.UTF-8
       - name: Test shared configuration code
         run: make test
+
+      # Reproduz o caso da GUI em português: vírgula na interface, ponto nos arquivos.
+      - name: Test with Brazilian Portuguese numeric locale
+        run: |
+          make clean
+          LC_ALL=pt_BR.UTF-8 make test
       - name: Build GUI and daemon
         run: make

@@ -9,6 +9,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "undervolt.h"
+#include "numeric_ascii.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -95,7 +96,7 @@ static int parse_last_double(const char *line, double *value) {
 
     char *number_end = NULL;
     errno = 0;
-    double parsed = strtod(number, &number_end);
+    double parsed = numeric_ascii_strtod(number, &number_end);
     if (number == number_end || *number_end != '\0' || errno != 0 || !isfinite(parsed)) {
         return -1;
     }
@@ -104,13 +105,26 @@ static int parse_last_double(const char *line, double *value) {
     return 0;
 }
 
-/* Escreve uma linha de domínio usando índice estável e um nome legível para humanos. */
+/*
+ * Escreve uma linha de domínio usando índice estável e ponto decimal.
+ *
+ * A GUI pode exibir "-60,00" em pt_BR, mas intel-undervolt exige "-60.00".
+ * Por isso a conversão para texto nunca usa diretamente a locale da interface.
+ */
 static int write_domain_line(FILE *file, int index, double offset_mv) {
+    char formatted_offset[64];
+    if (numeric_ascii_format_double(formatted_offset,
+                                    sizeof(formatted_offset),
+                                    2,
+                                    offset_mv) < 0) {
+        return -1;
+    }
+
     return fprintf(file,
-                   "undervolt %d '%s' %.2f\n",
+                   "undervolt %d '%s' %s\n",
                    index,
                    UNDERVOLT_DOMAIN_NAMES[index],
-                   offset_mv) >= 0
+                   formatted_offset) >= 0
                ? 0
                : -1;
 }
@@ -349,7 +363,7 @@ size_t undervolt_parse_read_output_masked(
 
         char *end = NULL;
         errno = 0;
-        double value = strtod(position, &end);
+        double value = numeric_ascii_strtod(position, &end);
         if (position != end && errno == 0 && isfinite(value)) {
             offsets[index] = value;
             if (present != NULL) {

@@ -10,12 +10,35 @@
 #include "config.h"
 
 #include <assert.h>
+#include <locale.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+/* Helper pequeno para conferir o texto JSON realmente gravado no disco. */
+static char *read_file(const char *path) {
+    FILE *file = fopen(path, "rb");
+    assert(file != NULL);
+    assert(fseek(file, 0, SEEK_END) == 0);
+    long length = ftell(file);
+    assert(length >= 0);
+    rewind(file);
+
+    char *contents = calloc((size_t)length + 1U, 1U);
+    assert(contents != NULL);
+    assert(fread(contents, 1U, (size_t)length, file) == (size_t)length);
+    fclose(file);
+    return contents;
+}
+
 /* Basic round-trip tests keep the hand-written tiny JSON parser honest. */
 int main(void) {
+    /*
+     * Usa a locale real do processo. O CI executa também em pt_BR.UTF-8 para
+     * garantir que o arquivo continue usando ponto decimal.
+     */
+    assert(setlocale(LC_ALL, "") != NULL);
     /* 1) Os padrões são o contrato usado quando ainda não existe configuração. */
     CpuConfig config;
     cpu_config_defaults(&config);
@@ -41,12 +64,24 @@ int main(void) {
     close(fd);
 
     cpu_config_defaults(&config);
+    config.low_threshold_pct = 6.5;
+    config.high_threshold_pct = 10.5;
     config.low_frequency_khz = 900000;
     config.high_frequency_khz = 3900000;
     assert(cpu_config_write(path, &config, error, sizeof(error)) == 0);
 
+    /* JSON é formato de máquina: ponto é obrigatório mesmo com GUI em pt_BR. */
+    char *written_json = read_file(path);
+    assert(strstr(written_json, "\"low_threshold_pct\": 6.5") != NULL);
+    assert(strstr(written_json, "\"high_threshold_pct\": 10.5") != NULL);
+    assert(strstr(written_json, "6,5") == NULL);
+    assert(strstr(written_json, "10,5") == NULL);
+    free(written_json);
+
     CpuConfig loaded;
     assert(cpu_config_load(path, &loaded, error, sizeof(error)) == 0);
+    assert(loaded.low_threshold_pct == 6.5);
+    assert(loaded.high_threshold_pct == 10.5);
     assert(loaded.low_frequency_khz == 900000);
     assert(loaded.high_frequency_khz == 3900000);
 

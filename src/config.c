@@ -7,6 +7,7 @@
  */
 
 #include "config.h"
+#include "numeric_ascii.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -116,7 +117,7 @@ static int parse_double_field(const char *json, const char *key, double *value) 
 
     char *end = NULL;
     errno = 0;
-    double parsed = strtod(position, &end);
+    double parsed = numeric_ascii_strtod(position, &end);
     if (position == end || errno != 0) {
         return -1;
     }
@@ -220,16 +221,36 @@ int cpu_config_write(const char *path,
         return -1;
     }
 
+    /*
+     * JSON sempre usa ponto decimal, mesmo quando a interface está em pt_BR.
+     * Formatamos os doubles separadamente para não deixar fprintf herdar
+     * LC_NUMERIC e produzir JSON inválido como "6,0".
+     */
+    char low_threshold[64];
+    char high_threshold[64];
+    if (numeric_ascii_format_double(low_threshold,
+                                    sizeof(low_threshold),
+                                    1,
+                                    config->low_threshold_pct) < 0 ||
+        numeric_ascii_format_double(high_threshold,
+                                    sizeof(high_threshold),
+                                    1,
+                                    config->high_threshold_pct) < 0) {
+        fclose(file);
+        set_error(error, error_size, "Falha ao formatar valores numéricos da configuração.");
+        return -1;
+    }
+
     int written = fprintf(file,
                           "{\n"
-                          "  \"low_threshold_pct\": %.1f,\n"
-                          "  \"high_threshold_pct\": %.1f,\n"
+                          "  \"low_threshold_pct\": %s,\n"
+                          "  \"high_threshold_pct\": %s,\n"
                           "  \"low_frequency_khz\": %llu,\n"
                           "  \"high_frequency_khz\": %llu,\n"
                           "  \"interval_ms\": %llu\n"
                           "}\n",
-                          config->low_threshold_pct,
-                          config->high_threshold_pct,
+                          low_threshold,
+                          high_threshold,
                           (unsigned long long)config->low_frequency_khz,
                           (unsigned long long)config->high_frequency_khz,
                           (unsigned long long)config->interval_ms);

@@ -27,8 +27,9 @@ DAEMON := $(BUILD_DIR)/cpu-clock-switch-daemon
 TEST_CONFIG := $(BUILD_DIR)/test-config
 TEST_UNDERVOLT := $(BUILD_DIR)/test-undervolt
 
-GUI_SOURCES := src/main.c src/config.c src/cpu_linux.c src/command.c src/undervolt.c
-DAEMON_SOURCES := src/daemon.c src/config.c src/cpu_linux.c
+COMMON_NUMERIC_SOURCE := src/numeric_ascii.c
+GUI_SOURCES := src/main.c src/config.c src/cpu_linux.c src/command.c src/undervolt.c $(COMMON_NUMERIC_SOURCE)
+DAEMON_SOURCES := src/daemon.c src/config.c src/cpu_linux.c $(COMMON_NUMERIC_SOURCE)
 
 .PHONY: all clean test install uninstall enable check-gtk
 
@@ -41,17 +42,17 @@ check-gtk:
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(GUI): $(GUI_SOURCES) src/config.h src/cpu_linux.h src/command.h src/undervolt.h | $(BUILD_DIR)
+$(GUI): $(GUI_SOURCES) src/config.h src/cpu_linux.h src/command.h src/undervolt.h src/numeric_ascii.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(GTK_CFLAGS) $(GUI_SOURCES) -o $@ $(GTK_LIBS) -lm
 
-$(DAEMON): $(DAEMON_SOURCES) src/config.h src/cpu_linux.h | $(BUILD_DIR)
+$(DAEMON): $(DAEMON_SOURCES) src/config.h src/cpu_linux.h src/numeric_ascii.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DAEMON_SOURCES) -o $@
 
-$(TEST_CONFIG): tests/test_config.c src/config.c src/config.h | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_config.c src/config.c -o $@
+$(TEST_CONFIG): tests/test_config.c src/config.c src/config.h src/numeric_ascii.c src/numeric_ascii.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_config.c src/config.c src/numeric_ascii.c -o $@
 
-$(TEST_UNDERVOLT): tests/test_undervolt.c src/undervolt.c src/undervolt.h | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_undervolt.c src/undervolt.c -o $@ -lm
+$(TEST_UNDERVOLT): tests/test_undervolt.c src/undervolt.c src/undervolt.h src/numeric_ascii.c src/numeric_ascii.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_undervolt.c src/undervolt.c src/numeric_ascii.c -o $@ -lm
 
 # Os testes são binários C pequenos e independentes da interface GTK.
 test: $(TEST_CONFIG) $(TEST_UNDERVOLT)
