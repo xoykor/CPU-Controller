@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - cpu_linux.c
+ *
+ * Integração direta com interfaces do kernel Linux: /proc/stat para uso de CPU,
+ * sysfs/cpufreq para frequências e /proc/cpuinfo para identificação do fabricante.
+ * Nenhuma decisão de interface gráfica fica neste módulo.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "cpu_linux.h"
