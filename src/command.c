@@ -15,6 +15,7 @@
 /* Process execution                                                          */
 /* ------------------------------------------------------------------------- */
 
+/* Libera as strings capturadas de um comando e zera o resultado para evitar reuso acidental. */
 void command_result_clear(CommandResult *result) {
     if (result == NULL) {
         return;
@@ -26,6 +27,7 @@ void command_result_clear(CommandResult *result) {
     result->exit_status = 1;
 }
 
+/* Executa um processo de forma síncrona, capturando stdout/stderr e traduzindo o wait status para sucesso ou falha. */
 gboolean command_run(char *const argv[], CommandResult *result) {
     if (result == NULL || argv == NULL || argv[0] == NULL) {
         return FALSE;
@@ -76,6 +78,7 @@ gboolean command_run(char *const argv[], CommandResult *result) {
 /* Privileged commands                                                        */
 /* ------------------------------------------------------------------------- */
 
+/* Prefixa um comando administrativo com pkexec sem elevar o processo gráfico inteiro. */
 gboolean command_run_pkexec(char *const argv[], char **detail) {
     if (detail != NULL) {
         *detail = NULL;
@@ -129,6 +132,7 @@ char *command_systemctl_state(const char *verb, const char *unit) {
     return state;
 }
 
+/* Consulta systemd para refletir na interface se um serviço está habilitado no boot. */
 gboolean command_systemctl_is_enabled(const char *unit) {
     char *state = command_systemctl_state("is-enabled", unit);
     gboolean enabled = g_strcmp0(state, "enabled") == 0;
