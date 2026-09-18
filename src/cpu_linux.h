@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - cpu_linux.h
+ *
+ * API pequena para consultar métricas da CPU e alterar limites de frequência no
+ * Linux. A implementação fica isolada em cpu_linux.c para facilitar testes e
+ * futuras adaptações para outros mecanismos do kernel.
+ */
+
 #ifndef CPU_SWITCH_CPU_LINUX_H
 #define CPU_SWITCH_CPU_LINUX_H
 

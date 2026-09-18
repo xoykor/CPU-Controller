@@ -1,3 +1,10 @@
+/*
+ * CPU Switch Control - undervolt.h
+ *
+ * Contrato da camada de undervolt. A GUI trabalha com índices de domínio e
+ * offsets em mV sem precisar conhecer o formato textual do intel-undervolt.
+ */
+
 #ifndef CPU_SWITCH_UNDERVOLT_H
 #define CPU_SWITCH_UNDERVOLT_H
 

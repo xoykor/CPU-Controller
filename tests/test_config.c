@@ -1,3 +1,10 @@
+/*
+ * Testes da configuração de frequência.
+ *
+ * Estes testes verificam valores padrão, validação e o ciclo completo de
+ * gravação + leitura do pequeno arquivo JSON usado pelo daemon.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"
@@ -9,6 +16,7 @@
 
 /* Basic round-trip tests keep the hand-written tiny JSON parser honest. */
 int main(void) {
+    /* 1) Os padrões são o contrato usado quando ainda não existe configuração. */
     CpuConfig config;
     cpu_config_defaults(&config);
 
@@ -18,9 +26,11 @@ int main(void) {
     assert(config.high_frequency_khz == 3500000);
     assert(config.interval_ms == 500);
 
+    /* 2) Uma configuração padrão deve passar pela mesma validação da GUI. */
     char error[256] = {0};
     assert(cpu_config_validate(&config, 800000, 4000000, 1, error, sizeof(error)) == 0);
 
+    /* 3) A histerese inválida (limite baixo >= alto) precisa ser rejeitada. */
     config.low_threshold_pct = 20.0;
     config.high_threshold_pct = 10.0;
     assert(cpu_config_validate(&config, 800000, 4000000, 1, error, sizeof(error)) != 0);

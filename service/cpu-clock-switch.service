@@ -1,13 +1,19 @@
+# Unit do daemon nativo de frequência do CPU Switch Control.
+# O processo permanece em foreground; o systemd cuida de reinício e inicialização.
+
 [Unit]
 Description=CPU Clock Switch - configurable CPU frequency controller
 After=multi-user.target
 
 [Service]
+# O daemon lê a configuração indicada abaixo e escreve diretamente em sysfs/cpufreq.
 Type=simple
 ExecStart=/usr/local/bin/cpu-clock-switch-daemon
 Environment=CPU_CLOCK_SWITCH_CONFIG=/etc/cpu-clock-switch.json
+# Reinício automático evita perder o controle de frequência após uma falha inesperada.
 Restart=always
 RestartSec=1
 
+# Ativação padrão no boot normal multiusuário.
 [Install]
 WantedBy=multi-user.target

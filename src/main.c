@@ -1,3 +1,19 @@
+/*
+ * CPU Switch Control - main.c
+ *
+ * Interface gráfica GTK4 do projeto. Este arquivo coordena os módulos de CPU,
+ * configuração, comandos privilegiados e undervolt, mas evita implementar aqui
+ * os detalhes de baixo nível de cada um deles.
+ *
+ * Organização:
+ *   1. estado e helpers de interface;
+ *   2. configuração de frequência;
+ *   3. métricas e status do serviço;
+ *   4. controle de tensão/undervolt;
+ *   5. construção das páginas GTK;
+ *   6. ciclo de vida da aplicação.
+ */
+
 #define _GNU_SOURCE
 
 #include "command.h"
@@ -69,12 +85,14 @@ typedef struct {
 /* Small UI helpers                                                           */
 /* ------------------------------------------------------------------------- */
 
+/* Cria labels alinhados à esquerda para manter o layout consistente em todas as páginas. */
 static GtkWidget *new_left_label(const char *text) {
     GtkWidget *label = gtk_label_new(text);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
     return label;
 }
 
+/* Cria um GtkSpinButton já configurado com faixa, passo, casas decimais e expansão horizontal. */
 static GtkWidget *new_spin(double minimum,
                            double maximum,
                            double step,
@@ -85,6 +103,7 @@ static GtkWidget *new_spin(double minimum,
     return spin;
 }
 
+/* Adiciona ao grid uma linha padrão formada por rótulo, controle e unidade opcional. */
 static void grid_add_row(GtkWidget *grid,
                          int row,
                          const char *label_text,
@@ -100,6 +119,7 @@ static void grid_add_row(GtkWidget *grid,
     }
 }
 
+/* Atualiza a mensagem global de status e troca a classe CSS conforme sucesso ou erro. */
 static void set_status(AppState *state, const char *message, gboolean is_error) {
     gtk_label_set_text(GTK_LABEL(state->status_label), message != NULL ? message : "");
 
@@ -109,6 +129,7 @@ static void set_status(AppState *state, const char *message, gboolean is_error) 
     gtk_widget_add_css_class(state->status_label, is_error ? "error" : "accent");
 }
 
+/* Converte kHz do kernel para uma string curta em MHz ou GHz apropriada para a interface. */
 static char *format_frequency(uint64_t khz) {
     if (khz >= 1000000U) {
         return g_strdup_printf("%.2f GHz", (double)khz / 1000000.0);
@@ -116,6 +137,7 @@ static char *format_frequency(uint64_t khz) {
     return g_strdup_printf("%.0f MHz", (double)khz / 1000.0);
 }
 
+/* Escolhe a melhor mensagem de erro produzida por um comando externo para exibir ao usuário. */
 static const char *command_failure_detail(const CommandResult *result) {
     if (result != NULL && result->stderr_text != NULL) {
         char *trimmed = g_strstrip(result->stderr_text);
@@ -130,6 +152,7 @@ static const char *command_failure_detail(const CommandResult *result) {
 /* Frequency configuration                                                    */
 /* ------------------------------------------------------------------------- */
 
+/* Ajusta configuração antiga aos limites reais da CPU atual antes de preencher os controles. */
 static void normalize_config_to_hardware(AppState *state) {
     if (!state->have_frequency_range) {
         return;
@@ -154,6 +177,7 @@ static void normalize_config_to_hardware(AppState *state) {
     }
 }
 
+/* Copia a configuração em memória para os campos visíveis da página de frequência. */
 static void frequency_config_to_widgets(AppState *state) {
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(state->low_threshold_spin),
                               state->config.low_threshold_pct);
@@ -191,6 +215,7 @@ static void frequency_config_to_widgets(AppState *state) {
     g_free(minimum);
 }
 
+/* Lê os campos da GUI e converte MHz/%/ms para a estrutura usada pelo daemon. */
 static void frequency_widgets_to_config(AppState *state) {
     state->config.low_threshold_pct =
         gtk_spin_button_get_value(GTK_SPIN_BUTTON(state->low_threshold_spin));
@@ -208,6 +233,7 @@ static void frequency_widgets_to_config(AppState *state) {
         (uint64_t)(gtk_spin_button_get_value(GTK_SPIN_BUTTON(state->interval_spin)) + 0.5);
 }
 
+/* Redetecta políticas cpufreq e atualiza faixa, quantidade de políticas e sensibilidade dos controles. */
 static void refresh_hardware_detection(AppState *state, gboolean report_success) {
     char error[256] = {0};
     state->have_frequency_range =
@@ -238,6 +264,7 @@ static void refresh_hardware_detection(AppState *state, gboolean report_success)
  * This keeps the GUI itself unprivileged and makes the privileged action small
  * and easy to audit.
  */
+/* Valida, grava em arquivo temporário e instala a configuração em /etc usando privilégio apenas no passo final. */
 static gboolean save_frequency_config(AppState *state, gboolean restart_service) {
     if (!state->have_frequency_range) {
         set_status(state, "Não há uma faixa cpufreq válida para salvar.", TRUE);
@@ -318,16 +345,19 @@ static gboolean save_frequency_config(AppState *state, gboolean restart_service)
     return TRUE;
 }
 
+/* Callback do botão Salvar: persiste a configuração sem reiniciar o serviço. */
 static void on_frequency_save(GtkButton *button, gpointer user_data) {
     (void)button;
     save_frequency_config(user_data, FALSE);
 }
 
+/* Callback que salva e reinicia o daemon para aplicar imediatamente os novos limites. */
 static void on_frequency_save_restart(GtkButton *button, gpointer user_data) {
     (void)button;
     save_frequency_config(user_data, TRUE);
 }
 
+/* Restaura valores padrão apenas na interface; o usuário ainda decide quando salvar. */
 static void on_frequency_defaults(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = user_data;
@@ -341,6 +371,7 @@ static void on_frequency_defaults(GtkButton *button, gpointer user_data) {
     set_status(state, "Padrões restaurados na tela; clique em salvar para aplicá-los.", FALSE);
 }
 
+/* Callback que força nova leitura dos limites fornecidos pelo kernel. */
 static void on_hardware_refresh(GtkButton *button, gpointer user_data) {
     (void)button;
     refresh_hardware_detection(user_data, TRUE);
@@ -350,6 +381,7 @@ static void on_hardware_refresh(GtkButton *button, gpointer user_data) {
 /* Runtime metrics and service status                                         */
 /* ------------------------------------------------------------------------- */
 
+/* Atualiza periodicamente uso total e frequência atual mostrados no topo da janela. */
 static gboolean refresh_metrics(gpointer user_data) {
     AppState *state = user_data;
 
@@ -380,6 +412,7 @@ static gboolean refresh_metrics(gpointer user_data) {
     return G_SOURCE_CONTINUE;
 }
 
+/* Consulta o systemd periodicamente para mostrar o estado real do daemon. */
 static gboolean refresh_service_status(gpointer user_data) {
     AppState *state = user_data;
     char *service_state = command_systemctl_state("is-active", SERVICE_NAME);
@@ -394,6 +427,7 @@ static gboolean refresh_service_status(gpointer user_data) {
 /* Intel undervolt backend                                                    */
 /* ------------------------------------------------------------------------- */
 
+/* Copia offsets em mV para os controles correspondentes aos índices do backend. */
 static void undervolt_values_to_widgets(
     AppState *state,
     const double offsets[UNDERVOLT_DOMAIN_COUNT]) {
@@ -402,6 +436,7 @@ static void undervolt_values_to_widgets(
     }
 }
 
+/* Coleta os offsets atuais da interface antes de validar e aplicar. */
 static void undervolt_widgets_to_values(
     AppState *state,
     double offsets[UNDERVOLT_DOMAIN_COUNT]) {
@@ -411,6 +446,7 @@ static void undervolt_widgets_to_values(
     }
 }
 
+/* Mostra somente domínios retornados pelo hardware após a detecção; antes dela mantém todos visíveis. */
 static void update_undervolt_domain_visibility(AppState *state) {
     for (size_t index = 0; index < UNDERVOLT_DOMAIN_COUNT; ++index) {
         gboolean visible =
@@ -421,6 +457,7 @@ static void update_undervolt_domain_visibility(AppState *state) {
     }
 }
 
+/* Redetecta intel-undervolt, recarrega a configuração existente e atualiza disponibilidade dos controles. */
 static void refresh_undervolt_backend(AppState *state) {
     state->undervolt_domains_detected = FALSE;
     memset(state->undervolt_present, 0, sizeof(state->undervolt_present));
@@ -464,6 +501,7 @@ static void refresh_undervolt_backend(AppState *state) {
                                 command_systemctl_is_enabled(UNDERVOLT_SERVICE_NAME));
 }
 
+/* Executa a leitura privilegiada do backend, atualiza valores e registra quais domínios existem na CPU. */
 static void on_undervolt_read(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = user_data;
@@ -517,6 +555,7 @@ static void on_undervolt_read(GtkButton *button, gpointer user_data) {
     command_result_clear(&result);
 }
 
+/* Preserva a configuração existente, altera somente domínios detectados, aplica os offsets e sincroniza a opção de boot. */
 static gboolean write_and_apply_undervolt(AppState *state) {
     double offsets[UNDERVOLT_DOMAIN_COUNT];
     undervolt_widgets_to_values(state, offsets);
@@ -624,6 +663,7 @@ static gboolean write_and_apply_undervolt(AppState *state) {
     return TRUE;
 }
 
+/* Callback do botão Salvar e aplicar; delega todo o fluxo validado à função central. */
 static void on_undervolt_apply(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = user_data;
@@ -635,6 +675,7 @@ static void on_undervolt_apply(GtkButton *button, gpointer user_data) {
     write_and_apply_undervolt(state);
 }
 
+/* Coloca os campos visíveis em 0 mV sem aplicar automaticamente, evitando mudanças acidentais. */
 static void on_undervolt_zero(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = user_data;
@@ -644,6 +685,7 @@ static void on_undervolt_zero(GtkButton *button, gpointer user_data) {
     set_status(state, "Offsets colocados em 0 mV na tela; clique em aplicar para efetivar.", FALSE);
 }
 
+/* Callback que refaz apenas a detecção do backend de tensão. */
 static void on_undervolt_refresh(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = user_data;
@@ -655,6 +697,7 @@ static void on_undervolt_refresh(GtkButton *button, gpointer user_data) {
 /* Page construction                                                          */
 /* ------------------------------------------------------------------------- */
 
+/* Monta todos os widgets da aba Frequência e conecta seus callbacks. */
 static GtkWidget *build_frequency_page(AppState *state) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_top(page, 16);
@@ -743,6 +786,7 @@ static GtkWidget *build_frequency_page(AppState *state) {
     return page;
 }
 
+/* Monta a aba Tensão; as linhas de domínio são guardadas separadamente para poder ocultá-las dinamicamente. */
 static GtkWidget *build_undervolt_page(AppState *state) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_top(page, 16);
@@ -839,6 +883,7 @@ static GtkWidget *build_undervolt_page(AppState *state) {
 /* Application lifecycle                                                      */
 /* ------------------------------------------------------------------------- */
 
+/* Libera timers e memória pertencentes ao estado quando a janela é destruída. */
 static void app_state_free(gpointer data) {
     AppState *state = data;
     if (state == NULL) {
@@ -855,6 +900,7 @@ static void app_state_free(gpointer data) {
     g_free(state);
 }
 
+/* Cria o estado da aplicação, monta a janela, carrega configuração e inicia atualizações periódicas. */
 static void activate(GtkApplication *application, gpointer user_data) {
     (void)user_data;
 
@@ -917,6 +963,7 @@ static void activate(GtkApplication *application, gpointer user_data) {
     gtk_window_present(GTK_WINDOW(state->window));
 }
 
+/* Inicializa GtkApplication e entrega o ciclo de eventos ao GTK. */
 int main(int argc, char **argv) {
     GtkApplication *application =
         gtk_application_new("io.github.xoykor.cpu-switch-control", (GApplicationFlags)0);

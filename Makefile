@@ -1,3 +1,14 @@
+# CPU Switch Control - Makefile
+#
+# Alvos principais:
+#   make          -> compila GUI e daemon;
+#   make test     -> executa os testes unitários;
+#   make install  -> instala binários e arquivos de integração;
+#   make enable   -> habilita o daemon no systemd.
+#
+# O projeto usa C17 e GTK4; não há Cargo, Rust ou Python no runtime.
+
+# Ferramentas podem ser sobrescritas pelo ambiente (ex.: CC=clang make).
 CC ?= cc
 PKG_CONFIG ?= pkg-config
 PREFIX ?= /usr/local
@@ -21,6 +32,7 @@ DAEMON_SOURCES := src/daemon.c src/config.c src/cpu_linux.c
 
 .PHONY: all clean test install uninstall enable check-gtk
 
+# Build padrão: primeiro garante GTK4 disponível, depois compila GUI e daemon.
 all: check-gtk $(GUI) $(DAEMON)
 
 check-gtk:
@@ -41,10 +53,12 @@ $(TEST_CONFIG): tests/test_config.c src/config.c src/config.h | $(BUILD_DIR)
 $(TEST_UNDERVOLT): tests/test_undervolt.c src/undervolt.c src/undervolt.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_undervolt.c src/undervolt.c -o $@ -lm
 
+# Os testes são binários C pequenos e independentes da interface GTK.
 test: $(TEST_CONFIG) $(TEST_UNDERVOLT)
 	./$(TEST_CONFIG)
 	./$(TEST_UNDERVOLT)
 
+# A instalação não sobrescreve /etc/cpu-clock-switch.json se ele já existir.
 install: all
 	install -Dm755 $(GUI) $(DESTDIR)$(PREFIX)/bin/cpu-switch-control
 	install -Dm755 $(DAEMON) $(DESTDIR)$(PREFIX)/bin/cpu-clock-switch-daemon
@@ -54,6 +68,7 @@ install: all
 	@if [ ! -e "$(DESTDIR)/etc/cpu-clock-switch.json" ]; then 		install -Dm644 config/cpu-clock-switch.json $(DESTDIR)/etc/cpu-clock-switch.json; 	fi
 	@if command -v update-desktop-database >/dev/null 2>&1; then 		update-desktop-database $(DESTDIR)/usr/share/applications || true; 	fi
 
+# Remove os binários/integrações, mas preserva configuração do usuário em /etc.
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/cpu-switch-control
 	rm -f $(DESTDIR)$(PREFIX)/bin/cpu-clock-switch-daemon
@@ -61,6 +76,7 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/cpu-switch-control.svg
 	rm -f $(DESTDIR)/usr/share/applications/cpu-switch-control.desktop
 
+# Atalho opcional para ativar o daemon imediatamente após a instalação.
 enable:
 	systemctl daemon-reload
 	systemctl enable --now cpu-clock-switch.service

@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - undervolt.c
+ *
+ * Manipula os offsets de tensão usados pelo backend intel-undervolt.
+ * O módulo sabe interpretar a saída do backend, preservar o arquivo de
+ * configuração existente e alterar somente os domínios detectados no hardware.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "undervolt.h"
@@ -21,6 +29,7 @@ const char *UNDERVOLT_DOMAIN_NAMES[UNDERVOLT_DOMAIN_COUNT] = {
 /* Utility helpers                                                            */
 /* ------------------------------------------------------------------------- */
 
+/* Helper local para mensagens de erro da camada de undervolt. */
 static void set_error(char *buffer, size_t size, const char *message) {
     if (buffer != NULL && size > 0) {
         snprintf(buffer, size, "%s", message);
@@ -38,6 +47,7 @@ static const char *skip_space(const char *text) {
  * Parse just enough of an intel-undervolt line to obtain its domain index.
  * Display names are intentionally ignored because they may contain spaces.
  */
+/* Extrai somente o índice da linha `undervolt N ...`; o nome textual pode variar entre CPUs. */
 static int parse_domain_index(const char *line, int *index) {
     const char *cursor = skip_space(line);
     const char keyword[] = "undervolt";
@@ -60,6 +70,7 @@ static int parse_domain_index(const char *line, int *index) {
 }
 
 /* The offset is the final whitespace-separated token on an undervolt line. */
+/* Lê o último token numérico de uma linha, que no formato do backend é o offset em mV. */
 static int parse_last_double(const char *line, double *value) {
     const char *end = line + strlen(line);
     while (end > line && isspace((unsigned char)end[-1])) {
@@ -93,6 +104,7 @@ static int parse_last_double(const char *line, double *value) {
     return 0;
 }
 
+/* Escreve uma linha de domínio usando índice estável e um nome legível para humanos. */
 static int write_domain_line(FILE *file, int index, double offset_mv) {
     return fprintf(file,
                    "undervolt %d '%s' %.2f\n",
@@ -107,6 +119,7 @@ static int write_domain_line(FILE *file, int index, double offset_mv) {
 /* Public API                                                                 */
 /* ------------------------------------------------------------------------- */
 
+/* Inicializa todos os domínios em 0 mV, isto é, sem offset. */
 void undervolt_defaults(double offsets[UNDERVOLT_DOMAIN_COUNT]) {
     if (offsets == NULL) {
         return;
@@ -116,6 +129,7 @@ void undervolt_defaults(double offsets[UNDERVOLT_DOMAIN_COUNT]) {
     }
 }
 
+/* Impede overvolt pela aplicação e rejeita valores fora do intervalo suportado pela GUI. */
 int undervolt_validate(const double offsets[UNDERVOLT_DOMAIN_COUNT],
                        char *error,
                        size_t error_size) {
@@ -142,6 +156,7 @@ int undervolt_validate(const double offsets[UNDERVOLT_DOMAIN_COUNT],
     return 0;
 }
 
+/* Lê os offsets existentes sem alterar outras opções do arquivo intel-undervolt.conf. */
 int undervolt_load_config(const char *path,
                           double offsets[UNDERVOLT_DOMAIN_COUNT],
                           char *error,
@@ -191,12 +206,14 @@ int undervolt_load_config(const char *path,
     return result;
 }
 
+/* Decide se um domínio deve ser alterado; máscara NULL significa comportamento legado: todos. */
 static int domain_selected(
     int index,
     const unsigned char present[UNDERVOLT_DOMAIN_COUNT]) {
     return present == NULL || present[index] != 0;
 }
 
+/* Cria uma cópia editada preservando linhas e domínios que não foram detectados no hardware. */
 int undervolt_write_config_copy_masked(
     const char *source,
     const char *destination,
@@ -292,6 +309,7 @@ int undervolt_write_config_copy_masked(
     return 0;
 }
 
+/* Wrapper compatível que reescreve todos os domínios quando nenhuma máscara é necessária. */
 int undervolt_write_config_copy(const char *source,
                                 const char *destination,
                                 const double offsets[UNDERVOLT_DOMAIN_COUNT],
@@ -305,6 +323,7 @@ int undervolt_write_config_copy(const char *source,
                                               error_size);
 }
 
+/* Interpreta `intel-undervolt read` e produz simultaneamente valores e máscara de domínios presentes. */
 size_t undervolt_parse_read_output_masked(
     const char *output,
     double offsets[UNDERVOLT_DOMAIN_COUNT],
@@ -342,6 +361,7 @@ size_t undervolt_parse_read_output_masked(
     return found;
 }
 
+/* Wrapper simples para chamadores interessados apenas nos valores. */
 size_t undervolt_parse_read_output(const char *output,
                                    double offsets[UNDERVOLT_DOMAIN_COUNT]) {
     return undervolt_parse_read_output_masked(output, offsets, NULL);

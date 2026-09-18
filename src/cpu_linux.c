@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - cpu_linux.c
+ *
+ * Integração direta com interfaces do kernel Linux: /proc/stat para uso de CPU,
+ * sysfs/cpufreq para frequências e /proc/cpuinfo para identificação do fabricante.
+ * Nenhuma decisão de interface gráfica fica neste módulo.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "cpu_linux.h"
@@ -14,12 +22,14 @@
 /* Generic file helpers                                                       */
 /* ------------------------------------------------------------------------- */
 
+/* Helper local para devolver mensagens de erro sem depender da interface gráfica. */
 static void set_error(char *buffer, size_t size, const char *message) {
     if (buffer != NULL && size > 0) {
         snprintf(buffer, size, "%s", message);
     }
 }
 
+/* Lê um único inteiro de um arquivo sysfs, padrão usado por quase todos os atributos cpufreq. */
 static int read_u64_file(const char *path, uint64_t *value) {
     FILE *file = fopen(path, "r");
     if (file == NULL) {
@@ -36,6 +46,7 @@ static int read_u64_file(const char *path, uint64_t *value) {
     return result;
 }
 
+/* Escreve um inteiro em sysfs; o daemon já roda com privilégios suficientes para isso. */
 static int write_u64_file(const char *path, uint64_t value) {
     FILE *file = fopen(path, "w");
     if (file == NULL) {
@@ -50,6 +61,7 @@ static int write_u64_file(const char *path, uint64_t value) {
 }
 
 /* cpufreq directories we care about are named policy0, policy1, ... */
+/* Filtra somente diretórios policyN dentro de /sys/devices/system/cpu/cpufreq. */
 static int is_policy_name(const char *name) {
     if (strncmp(name, "policy", 6) != 0 || name[6] == '\0') {
         return 0;
@@ -63,6 +75,7 @@ static int is_policy_name(const char *name) {
     return 1;
 }
 
+/* Monta com segurança o caminho de um atributo pertencente a uma política cpufreq. */
 static int build_policy_file_path(char *buffer,
                                   size_t buffer_size,
                                   const char *policy_name,
@@ -80,6 +93,7 @@ static int build_policy_file_path(char *buffer,
 /* CPU usage                                                                  */
 /* ------------------------------------------------------------------------- */
 
+/* Lê a primeira linha de /proc/stat e soma os contadores necessários para calcular uso total. */
 int cpu_linux_read_times(CpuTimes *times, char *error, size_t error_size) {
     if (times == NULL) {
         set_error(error, error_size, "Destino inválido para leitura de uso da CPU.");
@@ -131,6 +145,7 @@ int cpu_linux_read_times(CpuTimes *times, char *error, size_t error_size) {
     return 0;
 }
 
+/* Calcula uso entre duas amostras; nunca tenta derivar porcentagem de uma amostra isolada. */
 double cpu_linux_usage_percent(const CpuTimes *previous, const CpuTimes *current) {
     if (previous == NULL || current == NULL || current->total <= previous->total) {
         return 0.0;
@@ -153,6 +168,7 @@ double cpu_linux_usage_percent(const CpuTimes *previous, const CpuTimes *current
 /* cpufreq discovery                                                          */
 /* ------------------------------------------------------------------------- */
 
+/* Descobre a interseção de frequências suportadas por todas as políticas para evitar valores inválidos. */
 int cpu_linux_detect_frequency_range(uint64_t *min_khz,
                                      uint64_t *max_khz,
                                      size_t *policy_count,
@@ -223,6 +239,7 @@ int cpu_linux_detect_frequency_range(uint64_t *min_khz,
     return 0;
 }
 
+/* Obtém uma frequência representativa da primeira política disponível para exibição na GUI. */
 int cpu_linux_read_current_frequency(uint64_t *frequency_khz,
                                      char *error,
                                      size_t error_size) {
@@ -268,6 +285,7 @@ int cpu_linux_read_current_frequency(uint64_t *frequency_khz,
 /* cpufreq writes                                                             */
 /* ------------------------------------------------------------------------- */
 
+/* Fixa min/max da política no mesmo valor, respeitando primeiro a ordem de escrita segura. */
 static int set_one_policy_frequency(const char *policy_name,
                                     uint64_t target_khz,
                                     uint64_t low_frequency_khz) {
@@ -318,6 +336,7 @@ static int set_one_policy_frequency(const char *policy_name,
     return write_u64_file(min_path, frequency);
 }
 
+/* Aplica o mesmo alvo a todas as políticas cpufreq encontradas no sistema. */
 int cpu_linux_set_all_policy_frequency(uint64_t target_khz,
                                        uint64_t low_frequency_khz,
                                        char *error,
@@ -359,6 +378,7 @@ int cpu_linux_set_all_policy_frequency(uint64_t target_khz,
 /* CPU vendor                                                                 */
 /* ------------------------------------------------------------------------- */
 
+/* Verifica GenuineIntel antes de oferecer controles específicos de intel-undervolt. */
 int cpu_linux_is_intel(void) {
     FILE *file = fopen("/proc/cpuinfo", "r");
     if (file == NULL) {

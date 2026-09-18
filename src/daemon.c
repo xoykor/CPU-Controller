@@ -1,3 +1,11 @@
+/*
+ * CPU Switch Control - daemon.c
+ *
+ * Processo de serviço que aplica a histerese de carga configurada pelo usuário.
+ * Ele lê o uso total da CPU e alterna todas as políticas cpufreq entre a
+ * frequência de baixa carga e a de alta carga.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include "config.h"
@@ -18,11 +26,13 @@
  */
 static volatile sig_atomic_t running = 1;
 
+/* Handler mínimo de SIGINT/SIGTERM: apenas pede que o laço principal termine de forma limpa. */
 static void handle_stop_signal(int signal_number) {
     (void)signal_number;
     running = 0;
 }
 
+/* Dorme pelo intervalo configurado e retoma corretamente quando nanosleep é interrompido por sinal. */
 static void sleep_ms(uint64_t milliseconds) {
     struct timespec remaining = {
         .tv_sec = (time_t)(milliseconds / 1000U),
@@ -55,6 +65,7 @@ static CpuConfig load_runtime_config(const char *path) {
     return config;
 }
 
+/* Carrega configuração, coleta amostras de uso e mantém a máquina no estado LOW/HIGH usando histerese. */
 int main(void) {
     const char *config_path = getenv("CPU_CLOCK_SWITCH_CONFIG");
     if (config_path == NULL || *config_path == '\0') {
