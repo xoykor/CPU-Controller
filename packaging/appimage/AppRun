@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${APPDIR:-}" ]; then
+    APPROOT="$APPDIR"
+else
+    APPROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+fi
+
+export CPU_SWITCH_APPDIR="$APPROOT"
+export PATH="$APPROOT/usr/bin:${PATH:-/usr/bin:/bin}"
+
+prepend_library_path() {
+    directory="$1"
+    [ -d "$directory" ] || return 0
+    if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+        LD_LIBRARY_PATH="$directory:$LD_LIBRARY_PATH"
+    else
+        LD_LIBRARY_PATH="$directory"
+    fi
+}
+
+prepend_library_path "$APPROOT/usr/lib"
+prepend_library_path "$APPROOT/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+
+export XDG_DATA_DIRS="$APPROOT/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# linuxdeploy plugins (notably the GTK plugin) install runtime environment hooks here.
+if [ -d "$APPROOT/apprun-hooks" ]; then
+    for hook in "$APPROOT"/apprun-hooks/*; do
+        [ -f "$hook" ] || continue
+        # shellcheck disable=SC1090
+        . "$hook"
+    done
+fi
+
+# The GUI can live inside the AppImage, but systemd cannot run a daemon from the
+# temporary AppImage mount after it is unmounted. Keep a synchronized system
+# copy. CPU_SWITCH_SKIP_SYSTEM_SETUP=1 disables this first-run/update prompt.
+if [ "${CPU_SWITCH_SKIP_SYSTEM_SETUP:-0}" != "1" ] &&
+   [ -d /run/systemd/system ] &&
+   command -v pkexec >/dev/null 2>&1; then
+    embedded_daemon="$APPROOT/usr/bin/cpu-clock-switch-daemon"
+    embedded_unit="$APPROOT/usr/share/cpu-switch-control/cpu-clock-switch.service"
+    system_daemon="/usr/local/bin/cpu-clock-switch-daemon"
+    system_unit="/etc/systemd/system/cpu-clock-switch.service"
+    need_setup=0
+
+    if [ ! -x "$system_daemon" ] || ! cmp -s "$embedded_daemon" "$system_daemon"; then
+        need_setup=1
+    fi
+    if [ ! -f "$system_unit" ] || ! cmp -s "$embedded_unit" "$system_unit"; then
+        need_setup=1
+    fi
+
+    if [ "$need_setup" -eq 1 ]; then
+        pkexec "$APPROOT/usr/lib/cpu-switch-control/install-system-components.sh" || true
+    fi
+fi
+
+exec "$APPROOT/usr/bin/cpu-switch-control" "$@"

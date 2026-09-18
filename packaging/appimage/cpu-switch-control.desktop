@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CPU Switch Control
+Name[pt_BR]=Controle de CPU
+Comment=Configure automatic CPU frequency and Intel undervolt
+Comment[pt_BR]=Configure frequência automática e undervolt Intel
+Exec=cpu-switch-control
+TryExec=cpu-switch-control
+Icon=cpu-switch-control
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=CPU;frequency;voltage;undervolt;power;
+Keywords[pt_BR]=CPU;frequência;tensão;undervolt;energia;
