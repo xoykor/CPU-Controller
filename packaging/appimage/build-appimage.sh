@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# CPU Switch Control - gerador do AppImage.
+#
+# Compila o projeto, monta o AppDir com linuxdeploy, inclui daemon/configuração
+# e produz o AppImage x86_64 validado pelo workflow do GitHub Actions.
+
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
