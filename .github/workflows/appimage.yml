@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
+  # O artefato é construído em uma base relativamente antiga para evitar exigir glibc recente.
   appimage:
     runs-on: ubuntu-22.04
     env:
@@ -22,9 +23,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y             build-essential             pkg-config             libgtk-4-dev             libgirepository1.0-dev             librsvg2-dev             file             curl
 
+      # Não distribui um AppImage se os testes de lógica falharem.
       - name: Run tests
         run: make test
 
+      # Ferramentas de empacotamento são obtidas apenas no runner e não entram no repositório.
       - name: Download AppImage tools
         run: |
           mkdir -p tools
@@ -36,6 +39,7 @@ jobs:
       - name: Build AppImage
         run: packaging/appimage/build-appimage.sh
 
+      # Extrai o produto final e confirma os componentes que o AppRun espera encontrar.
       - name: Verify AppImage contents
         run: |
           rm -rf squashfs-root
@@ -48,6 +52,7 @@ jobs:
           test -f squashfs-root/usr/share/cpu-switch-control/cpu-clock-switch.json
           rm -rf squashfs-root
 
+      # Publica o arquivo validado como artefato do workflow.
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
